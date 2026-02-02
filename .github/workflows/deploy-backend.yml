@@ -10,7 +10,7 @@ jobs:
     uses: ajnacloud-ksj/ajna-github-workflows/.github/workflows/reusable-lambda.yml@main
     with:
       # AWS Configuration
-      aws-region: 'us-east-1'
+      aws-region: 'ap-south-1'
       
       # ECR Repository name (will be created if doesn't exist)
       ecr-repository: 'nutriwealth-backend'
