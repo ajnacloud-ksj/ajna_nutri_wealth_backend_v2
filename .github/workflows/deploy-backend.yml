@@ -20,7 +20,7 @@ jobs:
       ecr-repository: 'nutriwealth-backend'
       
       # Lambda function name (must exist in AWS Lambda)
-      lambda-function-name: 'nutriwealth-backend-api'
+      lambda-function-name: 'ajna_nutri_wealth_backend_v2'
       
       # GitHub OIDC Role ARN (replace with your role)
       # Format: arn:aws:iam::ACCOUNT_ID:role/GitHubActionsRole
