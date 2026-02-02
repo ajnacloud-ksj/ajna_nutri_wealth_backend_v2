@@ -1,0 +1,27 @@
+name: Deploy Backend to Lambda
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:  # Allow manual deployment
+
+jobs:
+  deploy:
+    uses: ajnacloud-ksj/ajna-github-workflows/.github/workflows/reusable-lambda.yml@main
+    with:
+      # AWS Configuration
+      aws-region: 'us-east-1'
+      
+      # ECR Repository name (will be created if doesn't exist)
+      ecr-repository: 'nutriwealth-backend'
+      
+      # Lambda function name (must exist in AWS Lambda)
+      lambda-function-name: 'nutriwealth-backend-api'
+      
+      # GitHub OIDC Role ARN (replace with your role)
+      # Format: arn:aws:iam::ACCOUNT_ID:role/GitHubActionsRole
+      role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+      
+      # Working directory (where Dockerfile is located)
+      working-directory: '.'
+    secrets: inherit
