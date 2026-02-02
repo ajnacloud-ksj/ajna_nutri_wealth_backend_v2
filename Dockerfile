@@ -1,7 +1,7 @@
 FROM public.ecr.aws/lambda/python:3.12
 
 # Install uv for faster dependency installation
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+RUN pip install uv
 
 # Copy dependency files
 COPY pyproject.toml ${LAMBDA_TASK_ROOT}
