@@ -1,4 +1,5 @@
 #!/bin/bash
+#...
 
 # NutriWealth Lambda Deployment Script
 # Usage: ./deploy.sh [dev|staging|prod]
