@@ -1,0 +1,58 @@
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+*.egg-info/
+
+# Build outputs
+dist/
+build/
+
+# Docker
+localstack-data/
+.localstack/
+
+# IDE
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+server.log
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Temporary files
+*.tmp
+*.local
+.cache/
+
+# AWS
+.aws-sam/
+samconfig.toml
+
+# Database
+*.db
+*.sqlite

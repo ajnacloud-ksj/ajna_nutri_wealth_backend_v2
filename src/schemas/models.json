@@ -1,0 +1,64 @@
+{
+    "fields": {
+        "id": {
+            "type": "string",
+            "required": true
+        },
+        "name": {
+            "type": "string",
+            "required": true
+        },
+        "provider": {
+            "type": "string",
+            "required": true
+        },
+        "model_id": {
+            "type": "string",
+            "required": true
+        },
+        "description": {
+            "type": "string",
+            "required": false
+        },
+        "category": {
+            "type": "string",
+            "required": false
+        },
+        "input_cost_per_1k_tokens": {
+            "type": "double",
+            "required": true
+        },
+        "output_cost_per_1k_tokens": {
+            "type": "double",
+            "required": true
+        },
+        "max_tokens": {
+            "type": "integer",
+            "required": false
+        },
+        "supports_vision": {
+            "type": "boolean",
+            "required": false
+        },
+        "is_active": {
+            "type": "boolean",
+            "required": false
+        },
+        "is_default": {
+            "type": "boolean",
+            "required": false
+        },
+        "required_subscription_tier": {
+            "type": "string",
+            "required": false
+        },
+        "created_at": {
+            "type": "timestamp",
+            "required": true
+        },
+        "updated_at": {
+            "type": "timestamp",
+            "required": true
+        }
+    }
+}

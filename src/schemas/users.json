@@ -1,0 +1,44 @@
+{
+    "fields": {
+        "id": {
+            "type": "string",
+            "required": true
+        },
+        "email": {
+            "type": "string",
+            "required": true
+        },
+        "full_name": {
+            "type": "string",
+            "required": false
+        },
+        "role": {
+            "type": "string",
+            "required": false
+        },
+        "user_type": {
+            "type": "string",
+            "required": false
+        },
+        "subscription_id": {
+            "type": "string",
+            "required": false
+        },
+        "is_subscribed": {
+            "type": "boolean",
+            "required": false
+        },
+        "trial_used_today": {
+            "type": "integer",
+            "required": false
+        },
+        "created_at": {
+            "type": "timestamp",
+            "required": false
+        },
+        "updated_at": {
+            "type": "timestamp",
+            "required": false
+        }
+    }
+}

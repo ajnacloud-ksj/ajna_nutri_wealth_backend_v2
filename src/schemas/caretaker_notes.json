@@ -1,0 +1,36 @@
+{
+    "fields": {
+        "id": {
+            "type": "string",
+            "required": true
+        },
+        "care_relationship_id": {
+            "type": "string",
+            "required": true
+        },
+        "author_id": {
+            "type": "string",
+            "required": true
+        },
+        "note_text": {
+            "type": "string",
+            "required": true
+        },
+        "note_type": {
+            "type": "string",
+            "required": false
+        },
+        "is_visible_to_user": {
+            "type": "boolean",
+            "required": false
+        },
+        "created_at": {
+            "type": "timestamp",
+            "required": true
+        },
+        "updated_at": {
+            "type": "timestamp",
+            "required": true
+        }
+    }
+}

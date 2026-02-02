@@ -1,0 +1,40 @@
+{
+    "fields": {
+        "id": {
+            "type": "string",
+            "required": true
+        },
+        "participant_id": {
+            "type": "string",
+            "required": true
+        },
+        "caretaker_id": {
+            "type": "string",
+            "required": true
+        },
+        "category": {
+            "type": "string",
+            "required": true
+        },
+        "is_granted": {
+            "type": "boolean",
+            "required": true
+        },
+        "notes": {
+            "type": "string",
+            "required": false
+        },
+        "requested_at": {
+            "type": "timestamp",
+            "required": false
+        },
+        "granted_at": {
+            "type": "timestamp",
+            "required": false
+        },
+        "updated_at": {
+            "type": "timestamp",
+            "required": true
+        }
+    }
+}

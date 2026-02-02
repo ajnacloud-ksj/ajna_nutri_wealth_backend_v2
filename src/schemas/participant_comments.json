@@ -1,0 +1,44 @@
+{
+    "fields": {
+        "id": {
+            "type": "string",
+            "required": true
+        },
+        "participant_id": {
+            "type": "string",
+            "required": true
+        },
+        "caretaker_id": {
+            "type": "string",
+            "required": true
+        },
+        "author_type": {
+            "type": "string",
+            "required": true
+        },
+        "content_type": {
+            "type": "string",
+            "required": true
+        },
+        "content_id": {
+            "type": "string",
+            "required": false
+        },
+        "comment_text": {
+            "type": "string",
+            "required": true
+        },
+        "is_visible_to_participant": {
+            "type": "boolean",
+            "required": true
+        },
+        "created_at": {
+            "type": "timestamp",
+            "required": true
+        },
+        "updated_at": {
+            "type": "timestamp",
+            "required": true
+        }
+    }
+}

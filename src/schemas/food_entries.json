@@ -1,0 +1,72 @@
+{
+    "fields": {
+        "id": {
+            "type": "string",
+            "required": true
+        },
+        "user_id": {
+            "type": "string",
+            "required": true
+        },
+        "description": {
+            "type": "string",
+            "required": false
+        },
+        "image_url": {
+            "type": "string",
+            "required": false
+        },
+        "meal_type": {
+            "type": "string",
+            "required": false
+        },
+        "meal_date": {
+            "type": "string",
+            "required": false
+        },
+        "meal_time": {
+            "type": "string",
+            "required": false
+        },
+        "calories": {
+            "type": "double",
+            "required": false
+        },
+        "total_protein": {
+            "type": "double",
+            "required": false
+        },
+        "total_carbohydrates": {
+            "type": "double",
+            "required": false
+        },
+        "total_fats": {
+            "type": "double",
+            "required": false
+        },
+        "total_fiber": {
+            "type": "double",
+            "required": false
+        },
+        "total_sodium": {
+            "type": "double",
+            "required": false
+        },
+        "created_at": {
+            "type": "timestamp",
+            "required": false
+        },
+        "updated_at": {
+            "type": "timestamp",
+            "required": false
+        },
+        "ingredients": {
+            "type": "string",
+            "required": false
+        },
+        "extracted_nutrients": {
+            "type": "string",
+            "required": false
+        }
+    }
+}

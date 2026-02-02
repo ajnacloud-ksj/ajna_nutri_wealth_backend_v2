@@ -1,0 +1,36 @@
+{
+    "fields": {
+        "id": {
+            "type": "string",
+            "required": true
+        },
+        "participant_id": {
+            "type": "string",
+            "required": true
+        },
+        "caretaker_id": {
+            "type": "string",
+            "required": true
+        },
+        "category": {
+            "type": "string",
+            "required": true
+        },
+        "status": {
+            "type": "string",
+            "required": true
+        },
+        "message": {
+            "type": "string",
+            "required": false
+        },
+        "responded_at": {
+            "type": "timestamp",
+            "required": false
+        },
+        "created_at": {
+            "type": "timestamp",
+            "required": true
+        }
+    }
+}

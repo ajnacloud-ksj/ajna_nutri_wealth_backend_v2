@@ -1,0 +1,44 @@
+{
+    "fields": {
+        "id": {
+            "type": "string",
+            "required": true
+        },
+        "workout_id": {
+            "type": "string",
+            "required": false
+        },
+        "exercise_name": {
+            "type": "string",
+            "required": true
+        },
+        "sets": {
+            "type": "integer",
+            "required": false
+        },
+        "reps": {
+            "type": "integer",
+            "required": false
+        },
+        "weight": {
+            "type": "double",
+            "required": false
+        },
+        "distance": {
+            "type": "double",
+            "required": false
+        },
+        "duration_minutes": {
+            "type": "double",
+            "required": false
+        },
+        "calories_burned": {
+            "type": "double",
+            "required": false
+        },
+        "created_at": {
+            "type": "timestamp",
+            "required": false
+        }
+    }
+}

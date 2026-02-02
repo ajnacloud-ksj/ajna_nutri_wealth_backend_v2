@@ -1,0 +1,76 @@
+service: nutriwealth-async
+
+provider:
+  name: aws
+  runtime: python3.11
+  stage: ${opt:stage, 'dev'}
+  region: us-east-1
+  architecture: arm64
+  environment:
+    IBEX_API_URL: ${env:IBEX_API_URL}
+    IBEX_API_KEY: ${env:IBEX_API_KEY}
+    OPENAI_API_KEY: ${env:OPENAI_API_KEY}
+    GROQ_API_KEY: ${env:GROQ_API_KEY}
+    S3_BUCKET: nutriwealth-uploads
+
+functions:
+  # Main API Lambda (existing, modified)
+  api:
+    handler: src/app_optimized.lambda_handler
+    timeout: 30
+    memorySize: 3008
+    environment:
+      PROCESSOR_FUNCTION_NAME: ${self:service}-${self:provider.stage}-aiProcessor
+      ENABLE_LAMBDA_ASYNC: true
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - lambda:InvokeFunction
+          - lambda:InvokeAsync
+        Resource:
+          - arn:aws:lambda:${self:provider.region}:*:function:${self:service}-${self:provider.stage}-aiProcessor
+    events:
+      - httpApi:
+          path: /{proxy+}
+          method: ANY
+
+  # New AI Processing Lambda (15 min timeout)
+  aiProcessor:
+    handler: src/handlers/ai_processor.handler
+    timeout: 900  # 15 minutes for complex AI
+    memorySize: 3008
+    reservedConcurrency: 10  # Control costs
+    maximumRetryAttempts: 2
+    maximumEventAge: 3600  # 1 hour
+    destinations:
+      onFailure:
+        type: sqs
+        arn: !GetAtt ProcessingDLQ.Arn
+    environment:
+      PROCESSOR_TYPE: async_ai
+
+resources:
+  Resources:
+    # Dead Letter Queue for failed processing
+    ProcessingDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:service}-${self:provider.stage}-dlq
+        MessageRetentionPeriod: 1209600  # 14 days
+        VisibilityTimeout: 960  # 16 minutes
+
+    # CloudWatch Alarms
+    ProcessingErrors:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        AlarmName: ${self:service}-${self:provider.stage}-processing-errors
+        MetricName: Errors
+        Namespace: AWS/Lambda
+        Dimensions:
+          - Name: FunctionName
+            Value: ${self:service}-${self:provider.stage}-aiProcessor
+        Statistic: Sum
+        Period: 300
+        EvaluationPeriods: 1
+        Threshold: 5
+        ComparisonOperator: GreaterThanThreshold

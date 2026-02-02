@@ -1,0 +1,56 @@
+{
+    "fields": {
+        "id": {
+            "type": "string",
+            "required": true
+        },
+        "user_id": {
+            "type": "string",
+            "required": true
+        },
+        "status": {
+            "type": "string",
+            "required": true
+        },
+        "category": {
+            "type": "string",
+            "required": false
+        },
+        "description": {
+            "type": "string",
+            "required": false
+        },
+        "image_url": {
+            "type": "string",
+            "required": false
+        },
+        "analysis_result": {
+            "type": "string",
+            "required": false
+        },
+        "error_message": {
+            "type": "string",
+            "required": false
+        },
+        "retry_count": {
+            "type": "integer",
+            "required": false
+        },
+        "estimated_completion": {
+            "type": "string",
+            "required": false
+        },
+        "completed_at": {
+            "type": "string",
+            "required": false
+        },
+        "created_at": {
+            "type": "string",
+            "required": true
+        },
+        "updated_at": {
+            "type": "string",
+            "required": true
+        }
+    }
+}

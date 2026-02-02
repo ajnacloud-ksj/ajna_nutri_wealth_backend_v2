@@ -1,0 +1,48 @@
+{
+    "fields": {
+        "id": {
+            "type": "string",
+            "required": true
+        },
+        "user_id": {
+            "type": "string",
+            "required": true
+        },
+        "goal_type": {
+            "type": "string",
+            "required": true
+        },
+        "target_value": {
+            "type": "double",
+            "required": false
+        },
+        "current_value": {
+            "type": "double",
+            "required": false
+        },
+        "target_date": {
+            "type": "string",
+            "required": false
+        },
+        "status": {
+            "type": "string",
+            "required": false
+        },
+        "description": {
+            "type": "string",
+            "required": false
+        },
+        "set_by_caretaker_id": {
+            "type": "string",
+            "required": false
+        },
+        "created_at": {
+            "type": "timestamp",
+            "required": true
+        },
+        "updated_at": {
+            "type": "timestamp",
+            "required": true
+        }
+    }
+}

@@ -1,0 +1,61 @@
+{
+  "description": "AI Model Configuration - Override default settings here",
+  "default_provider": "openai",
+  "providers": {
+    "openai": {
+      "enabled": true,
+      "models": {
+        "classifier": "gpt-4o-mini",
+        "food": "gpt-4o-mini",
+        "receipt": "gpt-4o-mini",
+        "workout": "gpt-4o-mini"
+      }
+    },
+    "groq": {
+      "enabled": true,
+      "models": {
+        "classifier": "llama-3.3-70b-versatile",
+        "food": "llama-3.3-70b-versatile",
+        "receipt": "llama-3.2-90b-vision",
+        "workout": "llama-3.3-70b-versatile"
+      }
+    },
+    "anthropic": {
+      "enabled": false,
+      "models": {
+        "classifier": "claude-3-haiku",
+        "food": "claude-3-5-sonnet",
+        "receipt": "claude-3-5-sonnet",
+        "workout": "claude-3-haiku"
+      }
+    },
+    "ollama": {
+      "enabled": false,
+      "models": {
+        "classifier": "llama3.2",
+        "food": "mixtral:8x7b",
+        "receipt": "llama3.2",
+        "workout": "llama3.2"
+      }
+    }
+  },
+  "features": {
+    "enable_classification": true,
+    "enable_fallback": true,
+    "enable_cache": true,
+    "enable_retry": true,
+    "max_retries": 3,
+    "enable_async": false
+  },
+  "performance": {
+    "classifier_timeout": 5,
+    "analysis_timeout": 20,
+    "max_tokens_classifier": 100,
+    "max_tokens_analysis": 500
+  },
+  "cost_limits": {
+    "max_cost_per_request": 0.10,
+    "daily_cost_limit": 100.00,
+    "monthly_cost_limit": 1000.00
+  }
+}

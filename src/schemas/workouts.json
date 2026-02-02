@@ -1,0 +1,64 @@
+{
+    "fields": {
+        "id": {
+            "type": "string",
+            "required": true
+        },
+        "user_id": {
+            "type": "string",
+            "required": true
+        },
+        "workout_type": {
+            "type": "string",
+            "required": false
+        },
+        "description": {
+            "type": "string",
+            "required": false
+        },
+        "image_url": {
+            "type": "string",
+            "required": false
+        },
+        "duration": {
+            "type": "double",
+            "required": false
+        },
+        "calories_burned": {
+            "type": "double",
+            "required": false
+        },
+        "intensity_level": {
+            "type": "string",
+            "required": false
+        },
+        "location": {
+            "type": "string",
+            "required": false
+        },
+        "equipment_used": {
+            "type": "string",
+            "required": false
+        },
+        "muscle_groups": {
+            "type": "string",
+            "required": false
+        },
+        "notes": {
+            "type": "string",
+            "required": false
+        },
+        "estimated_calories": {
+            "type": "boolean",
+            "required": false
+        },
+        "created_at": {
+            "type": "timestamp",
+            "required": false
+        },
+        "updated_at": {
+            "type": "timestamp",
+            "required": false
+        }
+    }
+}

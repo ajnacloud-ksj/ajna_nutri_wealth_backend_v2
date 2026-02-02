@@ -1,0 +1,85 @@
+{
+  "table_name": "ai_model_config",
+  "description": "Platform-level AI model configuration",
+  "columns": [
+    {
+      "name": "id",
+      "type": "VARCHAR",
+      "primary_key": true,
+      "description": "Unique identifier (use_case name)"
+    },
+    {
+      "name": "use_case",
+      "type": "VARCHAR",
+      "required": true,
+      "description": "Use case: classifier, food, receipt, workout"
+    },
+    {
+      "name": "provider",
+      "type": "VARCHAR",
+      "required": true,
+      "description": "AI provider: openai, groq, anthropic, ollama"
+    },
+    {
+      "name": "model_name",
+      "type": "VARCHAR",
+      "required": true,
+      "description": "Model name: gpt-4o-mini, llama-3.3-70b-versatile"
+    },
+    {
+      "name": "base_url",
+      "type": "VARCHAR",
+      "description": "API base URL for the provider"
+    },
+    {
+      "name": "temperature",
+      "type": "DECIMAL(2,1)",
+      "default": 0.0,
+      "description": "Model temperature setting"
+    },
+    {
+      "name": "max_tokens",
+      "type": "INT",
+      "default": 500,
+      "description": "Maximum tokens for response"
+    },
+    {
+      "name": "timeout_seconds",
+      "type": "INT",
+      "default": 30,
+      "description": "Request timeout in seconds"
+    },
+    {
+      "name": "cost_per_1k_tokens",
+      "type": "DECIMAL(10,6)",
+      "default": 0.001,
+      "description": "Average cost per 1000 tokens"
+    },
+    {
+      "name": "fallback_provider",
+      "type": "VARCHAR",
+      "description": "Fallback provider if primary fails"
+    },
+    {
+      "name": "fallback_model",
+      "type": "VARCHAR",
+      "description": "Fallback model name"
+    },
+    {
+      "name": "is_active",
+      "type": "BOOLEAN",
+      "default": true,
+      "description": "Whether this config is active"
+    },
+    {
+      "name": "created_at",
+      "type": "TIMESTAMP",
+      "default": "CURRENT_TIMESTAMP"
+    },
+    {
+      "name": "updated_at",
+      "type": "TIMESTAMP",
+      "default": "CURRENT_TIMESTAMP"
+    }
+  ]
+}

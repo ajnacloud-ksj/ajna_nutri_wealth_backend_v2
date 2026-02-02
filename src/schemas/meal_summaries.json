@@ -1,0 +1,28 @@
+{
+    "fields": {
+        "id": {
+            "type": "string",
+            "required": true
+        },
+        "food_entry_id": {
+            "type": "string",
+            "required": false
+        },
+        "dish_names": {
+            "type": "string",
+            "required": false
+        },
+        "meal_suggestion": {
+            "type": "string",
+            "required": false
+        },
+        "classification_confidence": {
+            "type": "double",
+            "required": false
+        },
+        "created_at": {
+            "type": "timestamp",
+            "required": false
+        }
+    }
+}

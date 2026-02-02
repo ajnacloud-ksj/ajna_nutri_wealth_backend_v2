@@ -1,0 +1,56 @@
+{
+    "fields": {
+        "id": {
+            "type": "string",
+            "required": true
+        },
+        "user_id": {
+            "type": "string",
+            "required": true
+        },
+        "caretaker_id": {
+            "type": "string",
+            "required": true
+        },
+        "caretaker_type": {
+            "type": "string",
+            "required": false
+        },
+        "status": {
+            "type": "string",
+            "required": true
+        },
+        "permission_level": {
+            "type": "string",
+            "required": true
+        },
+        "relationship_type": {
+            "type": "string",
+            "required": false
+        },
+        "invited_by": {
+            "type": "string",
+            "required": false
+        },
+        "invited_at": {
+            "type": "timestamp",
+            "required": false
+        },
+        "approved_at": {
+            "type": "timestamp",
+            "required": false
+        },
+        "notes": {
+            "type": "string",
+            "required": false
+        },
+        "created_at": {
+            "type": "timestamp",
+            "required": true
+        },
+        "updated_at": {
+            "type": "timestamp",
+            "required": true
+        }
+    }
+}

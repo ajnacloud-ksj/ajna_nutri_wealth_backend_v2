@@ -1,0 +1,14 @@
+{
+  "fields": {
+    "id": { "type": "string", "required": true },
+    "user_id": { "type": "string", "required": true },
+    "function_name": { "type": "string", "required": true },
+    "category": { "type": "string", "required": false },
+    "model_used": { "type": "string", "required": false },
+    "prompt_tokens": { "type": "integer", "required": false },
+    "completion_tokens": { "type": "integer", "required": false },
+    "total_tokens": { "type": "integer", "required": false },
+    "cost_usd": { "type": "double", "required": false },
+    "created_at": { "type": "timestamp", "required": false }
+  }
+}

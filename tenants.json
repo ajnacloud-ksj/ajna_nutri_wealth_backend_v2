@@ -1,0 +1,69 @@
+{
+  "tenants": {
+    "demo": {
+      "tenant_id": "demo-tenant",
+      "namespace": "demo",
+      "display_name": "Demo Organization",
+      "features": ["basic_analysis", "food_tracking"],
+      "settings": {
+        "max_api_calls_per_day": 100,
+        "storage_quota_mb": 100
+      }
+    },
+    "test": {
+      "tenant_id": "test-tenant",
+      "namespace": "default",
+      "display_name": "Test Environment",
+      "features": ["all"],
+      "settings": {
+        "max_api_calls_per_day": -1,
+        "storage_quota_mb": -1
+      }
+    },
+    "acme_corp": {
+      "tenant_id": "acme-corp-prod",
+      "namespace": "acme",
+      "display_name": "ACME Corporation",
+      "features": ["advanced_analysis", "food_tracking", "reporting", "queue"],
+      "domain_patterns": ["acme.com", "app.acme.com"],
+      "settings": {
+        "max_api_calls_per_day": 10000,
+        "storage_quota_mb": 10000,
+        "custom_branding": true
+      }
+    },
+    "health_co": {
+      "tenant_id": "health-co-prod",
+      "namespace": "healthco",
+      "display_name": "HealthCo Inc",
+      "features": ["advanced_analysis", "food_tracking", "nutrition_coaching", "queue"],
+      "domain_patterns": ["healthco.com", "app.healthco.com"],
+      "settings": {
+        "max_api_calls_per_day": 5000,
+        "storage_quota_mb": 5000,
+        "custom_branding": true
+      }
+    },
+    "startup_x": {
+      "tenant_id": "startup-x-prod",
+      "namespace": "startupx",
+      "display_name": "Startup X",
+      "features": ["basic_analysis", "food_tracking"],
+      "domain_patterns": ["startupx.io"],
+      "settings": {
+        "max_api_calls_per_day": 500,
+        "storage_quota_mb": 500
+      }
+    }
+  },
+  "default_tenant": "test",
+  "feature_definitions": {
+    "basic_analysis": "Basic food analysis with calorie counting",
+    "advanced_analysis": "Advanced nutrition analysis with micro-nutrients",
+    "food_tracking": "Track daily food intake",
+    "reporting": "Generate nutrition reports and insights",
+    "queue": "Background processing for analysis jobs",
+    "nutrition_coaching": "AI-powered nutrition recommendations",
+    "all": "All features enabled"
+  }
+}

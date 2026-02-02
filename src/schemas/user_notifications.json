@@ -1,0 +1,44 @@
+{
+    "fields": {
+        "id": {
+            "type": "string",
+            "required": true
+        },
+        "user_id": {
+            "type": "string",
+            "required": true
+        },
+        "analysis_id": {
+            "type": "string",
+            "required": false
+        },
+        "title": {
+            "type": "string",
+            "required": true
+        },
+        "message": {
+            "type": "string",
+            "required": true
+        },
+        "notification_type": {
+            "type": "string",
+            "required": true
+        },
+        "read": {
+            "type": "boolean",
+            "required": true
+        },
+        "metadata": {
+            "type": "string",
+            "required": false
+        },
+        "created_at": {
+            "type": "timestamp",
+            "required": true
+        },
+        "updated_at": {
+            "type": "timestamp",
+            "required": true
+        }
+    }
+}

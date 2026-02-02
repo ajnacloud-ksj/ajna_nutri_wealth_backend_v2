@@ -1,0 +1,52 @@
+{
+    "fields": {
+        "id": {
+            "type": "string",
+            "required": true
+        },
+        "code": {
+            "type": "string",
+            "required": true
+        },
+        "created_by": {
+            "type": "string",
+            "required": true
+        },
+        "permission_level": {
+            "type": "string",
+            "required": true
+        },
+        "caretaker_type": {
+            "type": "string",
+            "required": true
+        },
+        "default_permissions": {
+            "type": "string",
+            "required": false
+        },
+        "max_uses": {
+            "type": "integer",
+            "required": false
+        },
+        "current_uses": {
+            "type": "integer",
+            "required": false
+        },
+        "expires_at": {
+            "type": "timestamp",
+            "required": true
+        },
+        "used_by": {
+            "type": "string",
+            "required": false
+        },
+        "used_at": {
+            "type": "timestamp",
+            "required": false
+        },
+        "created_at": {
+            "type": "timestamp",
+            "required": true
+        }
+    }
+}

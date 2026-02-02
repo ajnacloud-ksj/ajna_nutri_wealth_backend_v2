@@ -1,0 +1,60 @@
+{
+    "fields": {
+        "id": {
+            "type": "string",
+            "required": true
+        },
+        "food_entry_id": {
+            "type": "string",
+            "required": false
+        },
+        "name": {
+            "type": "string",
+            "required": true
+        },
+        "serving_size": {
+            "type": "string",
+            "required": false
+        },
+        "calories": {
+            "type": "double",
+            "required": false
+        },
+        "proteins": {
+            "type": "double",
+            "required": false
+        },
+        "carbohydrates": {
+            "type": "double",
+            "required": false
+        },
+        "fats": {
+            "type": "double",
+            "required": false
+        },
+        "fiber": {
+            "type": "double",
+            "required": false
+        },
+        "sodium": {
+            "type": "double",
+            "required": false
+        },
+        "contains_allergens": {
+            "type": "boolean",
+            "required": false
+        },
+        "is_vegetarian": {
+            "type": "boolean",
+            "required": false
+        },
+        "is_vegan": {
+            "type": "boolean",
+            "required": false
+        },
+        "created_at": {
+            "type": "timestamp",
+            "required": false
+        }
+    }
+}

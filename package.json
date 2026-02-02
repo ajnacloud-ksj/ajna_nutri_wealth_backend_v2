@@ -1,0 +1,25 @@
+{
+  "name": "food-sense-backend-tests",
+  "version": "1.0.0",
+  "description": "API testing for Food Sense AI Tracker backend",
+  "scripts": {
+    "test": "newman run ../insomnia-collection.json",
+    "test:local": "newman run ../insomnia-collection.json --env-var BASE_URL=http://localhost:8000",
+    "test:docker": "newman run ../insomnia-collection.json --env-var BASE_URL=http://backend:8000",
+    "test:tenant": "newman run ../insomnia-collection.json --env-var X-Tenant-ID=acme_corp",
+    "test:verbose": "newman run ../insomnia-collection.json --verbose",
+    "test:report": "newman run ../insomnia-collection.json --reporters cli,html --reporter-html-export test-report.html"
+  },
+  "devDependencies": {
+    "newman": "^6.1.1",
+    "newman-reporter-html": "^1.0.5"
+  },
+  "keywords": [
+    "api",
+    "testing",
+    "newman",
+    "insomnia"
+  ],
+  "author": "",
+  "license": "MIT"
+}

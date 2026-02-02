@@ -1,0 +1,21 @@
+{
+  "database": {
+    "table_prefix": "app_",
+    "tables": {
+      "users": "app_users",
+      "food_entries": "app_food_entries",
+      "pending_analyses": "app_pending_analyses",
+      "models": "app_models",
+      "prompts": "app_prompts",
+      "meal_summaries": "app_meal_summaries",
+      "workouts": "app_workouts",
+      "receipts": "app_receipts",
+      "api_costs": "app_api_costs",
+      "images": "app_images"
+    }
+  },
+  "ai": {
+    "default_model": "gpt-4o-mini",
+    "provider": "openai"
+  }
+}

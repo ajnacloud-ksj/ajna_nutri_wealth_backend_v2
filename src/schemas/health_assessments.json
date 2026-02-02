@@ -1,0 +1,44 @@
+{
+    "fields": {
+        "id": {
+            "type": "string",
+            "required": true
+        },
+        "food_entry_id": {
+            "type": "string",
+            "required": false
+        },
+        "diabetes_rating": {
+            "type": "string",
+            "required": false
+        },
+        "diabetes_suggestion": {
+            "type": "string",
+            "required": false
+        },
+        "hypertension_rating": {
+            "type": "string",
+            "required": false
+        },
+        "hypertension_suggestion": {
+            "type": "string",
+            "required": false
+        },
+        "general_suggestion": {
+            "type": "string",
+            "required": false
+        },
+        "nutrients_high": {
+            "type": "string",
+            "required": false
+        },
+        "nutrients_low": {
+            "type": "string",
+            "required": false
+        },
+        "created_at": {
+            "type": "timestamp",
+            "required": false
+        }
+    }
+}

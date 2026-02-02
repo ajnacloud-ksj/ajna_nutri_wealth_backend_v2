@@ -1,0 +1,40 @@
+{
+    "fields": {
+        "id": {
+            "type": "string",
+            "required": true
+        },
+        "name": {
+            "type": "string",
+            "required": true
+        },
+        "category": {
+            "type": "string",
+            "required": true
+        },
+        "system_prompt": {
+            "type": "string",
+            "required": true
+        },
+        "user_prompt_template": {
+            "type": "string",
+            "required": true
+        },
+        "is_active": {
+            "type": "boolean",
+            "required": false
+        },
+        "created_by": {
+            "type": "string",
+            "required": false
+        },
+        "created_at": {
+            "type": "timestamp",
+            "required": false
+        },
+        "updated_at": {
+            "type": "timestamp",
+            "required": false
+        }
+    }
+}

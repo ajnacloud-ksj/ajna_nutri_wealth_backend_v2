@@ -1,0 +1,48 @@
+{
+    "fields": {
+        "id": {
+            "type": "string",
+            "required": true
+        },
+        "user_id": {
+            "type": "string",
+            "required": false
+        },
+        "file_path": {
+            "type": "string",
+            "required": true
+        },
+        "mime_type": {
+            "type": "string",
+            "required": true
+        },
+        "data": {
+            "type": "string",
+            "required": false
+        },
+        "s3_key": {
+            "type": "string",
+            "required": false
+        },
+        "s3_url": {
+            "type": "string",
+            "required": false
+        },
+        "storage_type": {
+            "type": "string",
+            "required": false
+        },
+        "bucket": {
+            "type": "string",
+            "required": false
+        },
+        "size_bytes": {
+            "type": "integer",
+            "required": false
+        },
+        "created_at": {
+            "type": "timestamp",
+            "required": false
+        }
+    }
+}

@@ -1,0 +1,20 @@
+{
+    "fields": {
+        "id": {
+            "type": "string",
+            "required": true
+        },
+        "user_id": {
+            "type": "string",
+            "required": true
+        },
+        "usage_date": {
+            "type": "string",
+            "required": false
+        },
+        "usage_count": {
+            "type": "integer",
+            "required": false
+        }
+    }
+}

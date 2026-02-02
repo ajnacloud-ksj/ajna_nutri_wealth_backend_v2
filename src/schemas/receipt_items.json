@@ -1,0 +1,48 @@
+{
+    "fields": {
+        "id": {
+            "type": "string",
+            "required": true
+        },
+        "receipt_id": {
+            "type": "string",
+            "required": false
+        },
+        "name": {
+            "type": "string",
+            "required": true
+        },
+        "description": {
+            "type": "string",
+            "required": false
+        },
+        "price": {
+            "type": "double",
+            "required": true
+        },
+        "quantity": {
+            "type": "double",
+            "required": false
+        },
+        "category": {
+            "type": "string",
+            "required": false
+        },
+        "subcategory": {
+            "type": "string",
+            "required": false
+        },
+        "sku": {
+            "type": "string",
+            "required": false
+        },
+        "discount": {
+            "type": "double",
+            "required": false
+        },
+        "created_at": {
+            "type": "timestamp",
+            "required": false
+        }
+    }
+}
