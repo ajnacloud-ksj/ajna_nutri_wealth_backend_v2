@@ -5,6 +5,10 @@ on:
     branches: [main]
   workflow_dispatch:  # Allow manual deployment
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   deploy:
     uses: ajnacloud-ksj/ajna-github-workflows/.github/workflows/reusable-lambda.yml@main
