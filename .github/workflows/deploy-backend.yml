@@ -26,4 +26,5 @@ jobs:
       
       # Working directory (where Dockerfile is located)
       working-directory: '.'
-    secrets: inherit
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
