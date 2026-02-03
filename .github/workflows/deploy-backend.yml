@@ -24,7 +24,7 @@ jobs:
       
       # GitHub OIDC Role ARN (replace with your role)
       # Format: arn:aws:iam::ACCOUNT_ID:role/GitHubActionsRole
-      role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+      role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
       
       # Working directory (where Dockerfile is located)
       working-directory: '.'
