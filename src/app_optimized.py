@@ -74,12 +74,13 @@ def lambda_handler(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, 
         user_id = event.get('headers', {}).get('x-user-id')
 
         # Create tenant-specific DB client
-        tenant_db = TenantManager.create_ibex_client(tenant_config)
+        tenant_db = TenantManager.create_ibex_client(tenant_config, client_class=IbexClient)
 
         # If using OptimizedIbexClient, enable direct Lambda in AWS environment
-        if hasattr(tenant_db, 'enable_direct_lambda') and os.environ.get('AWS_LAMBDA_FUNCTION_NAME'):
+        lambda_name = os.environ.get('IBEX_LAMBDA_NAME') or os.environ.get('AWS_LAMBDA_FUNCTION_NAME')
+        if hasattr(tenant_db, 'enable_direct_lambda') and lambda_name:
             # Enable direct Lambda invocation for better performance
-            tenant_db.enable_direct_lambda('ibex-db-lambda')
+            tenant_db.enable_direct_lambda(lambda_name)
 
         # If user_id is provided and we have OptimizedIbexClient, prefetch user data
         if user_id and hasattr(tenant_db, 'prefetch_user_data'):

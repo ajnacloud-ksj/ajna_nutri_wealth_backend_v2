@@ -17,6 +17,7 @@ class DatabaseConfig:
     namespace: str = "default"
     connection_timeout: int = 20
     max_retries: int = 3
+    lambda_name: Optional[str] = None
 
 
 @dataclass
@@ -133,7 +134,8 @@ class Settings:
             'tenant_id': os.environ.get('TENANT_ID', 'test-tenant'),
             'namespace': os.environ.get('DB_NAMESPACE', 'default'),
             'connection_timeout': int(os.environ.get('DB_TIMEOUT', '20')),
-            'max_retries': int(os.environ.get('DB_MAX_RETRIES', '3'))
+            'max_retries': int(os.environ.get('DB_MAX_RETRIES', '3')),
+            'lambda_name': os.environ.get('IBEX_LAMBDA_NAME')
         }
 
     def _get_auth_config(self, env: str) -> Dict[str, Any]:

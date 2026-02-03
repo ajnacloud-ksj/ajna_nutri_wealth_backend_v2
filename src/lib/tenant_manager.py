@@ -131,14 +131,18 @@ class TenantManager:
         return f"app_{base_table}"
 
     @classmethod
-    def create_ibex_client(cls, tenant_config: Dict[str, Any]):
+    def create_ibex_client(cls, tenant_config: Dict[str, Any], client_class=None):
         """Create an Ibex client configured for the specific tenant"""
-        from lib.ibex_client import IbexClient
+        if client_class is None:
+            from lib.ibex_client import IbexClient
+            client_class = IbexClient
 
         api_url = os.environ.get('IBEX_API_URL', 'https://smartlink.ajna.cloud/ibexdb')
         api_key = os.environ.get('IBEX_API_KEY')
 
-        return IbexClient(
+        # Check if the client class accepts specific arguments
+        # OptimizedIbexClient might accept different args in future, but for now signature is compatible
+        return client_class(
             api_url=api_url,
             api_key=api_key,
             tenant_id=tenant_config['tenant_id'],

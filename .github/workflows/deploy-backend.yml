@@ -24,6 +24,10 @@ jobs:
       
 
       
+      
+      # Environment Variables
+      environment-variables: "IBEX_LAMBDA_NAME=${{ vars.IBEX_LAMBDA_NAME }},COGNITO_USER_POOL_ID=${{ secrets.COGNITO_USER_POOL_ID }},COGNITO_CLIENT_ID=${{ secrets.COGNITO_CLIENT_ID }},IBEX_API_URL=${{ vars.IBEX_API_URL }},IBEX_API_KEY=${{ secrets.IBEX_API_KEY }}"
+      
       # Working directory (where Dockerfile is located)
       working-directory: '.'
     secrets:
