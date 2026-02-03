@@ -22,9 +22,7 @@ jobs:
       # Lambda function name (must exist in AWS Lambda)
       lambda-function-name: 'ajna_nutri_wealth_backend_v2'
       
-      # GitHub OIDC Role ARN (replace with your role)
-      # Format: arn:aws:iam::ACCOUNT_ID:role/GitHubActionsRole
-      role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+
       
       # Working directory (where Dockerfile is located)
       working-directory: '.'
