@@ -33,6 +33,7 @@ def get_allowed_origins():
         ]
 
 
+def get_cors_headers(event: Dict[str, Any] = None) -> Dict[str, str]:
     # AWS Lambda Function URL handles CORS (configured to return *)
     # We must NOT return duplicate headers, or browsers will block the request.
     return {}
