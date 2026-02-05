@@ -10,29 +10,24 @@ permissions:
   contents: read
 
 jobs:
-  deploy:
-    uses: ajnacloud-ksj/ajna-github-workflows/.github/workflows/reusable-lambda.yml@main
+  build-and-push:
+    uses: ajnacloud-ksj/ajna-github-workflows/.github/workflows/reusable-docker-ecr.yml@main
     with:
-      # AWS Configuration
-      aws-region: 'ap-south-1'
-      
-      # ECR Repository name (will be created if doesn't exist)
-      ecr-repository: 'nutriwealth-backend'
-      
-      # Lambda function name (must exist in AWS Lambda)
-      lambda-function-name: 'ajna_nutri_wealth_backend_v2'
-      
-      # Lambda Configuration
-      timeout: 300  # 5 minutes for AI processing
-      memory-size: 1024  # 1GB for better performance
-      
-      # Environment Variables (non-sensitive)
-      environment-variables: "AUTH_MODE=cognito,ENABLE_LAMBDA_ASYNC=true,IBEX_LAMBDA_NAME=${{ vars.IBEX_LAMBDA_NAME }},IBEX_API_URL=${{ vars.IBEX_API_URL }}"
-      
-      # Working directory (where Dockerfile is located)
-      working-directory: '.'
-    secrets:
-      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
-      COGNITO_USER_POOL_ID: ${{ secrets.COGNITO_USER_POOL_ID }}
-      COGNITO_CLIENT_ID: ${{ secrets.COGNITO_CLIENT_ID }}
-      IBEX_API_KEY: ${{ secrets.IBEX_API_KEY }}
+      aws-region: ap-south-1
+      ecr-repository: nutriwealth-backend
+      role-to-assume: arn:aws:iam::808527335982:role/GitHubActions-Deploy-Role
+      image-tag: ${{ github.sha }}
+      platform: linux/arm64
+    secrets: inherit
+
+  deploy-lambda:
+    needs: build-and-push
+    uses: ajnacloud-ksj/ajna-github-workflows/.github/workflows/reusable-lambda-deploy.yml@main
+    with:
+      aws-region: ap-south-1
+      lambda-function-name: ajna_nutri_wealth_backend_v2
+      image-uri: ${{ needs.build-and-push.outputs.image-uri }}
+      role-to-assume: arn:aws:iam::808527335982:role/GitHubActions-Deploy-Role
+      # Pass all environment variables explicitly
+      environment-variables: "AUTH_MODE=cognito,ENABLE_LAMBDA_ASYNC=true,IBEX_LAMBDA_NAME=${{ vars.IBEX_LAMBDA_NAME }},IBEX_API_URL=${{ vars.IBEX_API_URL }},COGNITO_USER_POOL_ID=${{ secrets.COGNITO_USER_POOL_ID }},COGNITO_CLIENT_ID=${{ secrets.COGNITO_CLIENT_ID }},IBEX_API_KEY=${{ secrets.IBEX_API_KEY }},OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}"
+    secrets: inherit
