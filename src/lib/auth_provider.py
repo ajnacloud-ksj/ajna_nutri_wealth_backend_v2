@@ -171,7 +171,8 @@ class CognitoAuthProvider(AuthProvider):
 
         if not user_id:
             # Try to get from Authorization header and verify
-            auth_header = event.get('headers', {}).get('Authorization', '')
+            headers = event.get('headers', {})
+            auth_header = headers.get('Authorization') or headers.get('authorization') or ''
             if auth_header.startswith('Bearer '):
                 token = auth_header[7:]
                 user_info = self.verify_token(token)
