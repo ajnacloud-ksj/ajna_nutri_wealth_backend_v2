@@ -8,16 +8,13 @@ import os
 import sys
 from typing import Dict, Any
 
-# Ensure src/ is in path
-sys.path.append(os.path.dirname(os.path.realpath(__file__)))
-
-# Import core services
-from lib.ibex_client import IbexClient
-from lib.ai_optimized import OptimizedAIService
-from lib.tenant_manager import TenantManager
-from lib.logger import logger
-from config.settings import settings
-import router
+# Import core services using absolute imports from src package
+from src.lib.ibex_client import IbexClient
+from src.lib.ai_optimized import OptimizedAIService
+from src.lib.tenant_manager import TenantManager
+from src.lib.logger import logger
+from src.config.settings import settings
+import src.router as router
 
 
 # Load Schemas
