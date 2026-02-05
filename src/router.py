@@ -6,11 +6,11 @@ import re
 from typing import Dict, Any
 
 # Import modernized handlers
-from handlers import data  # Now using modernized data handler
-from handlers import auth, storage, receipts
-from handlers import analyze  # Using improved analyze handler
-from handlers import analyze_async  # Async analysis with SQS
-from handlers import model_config  # Model configuration management
+from src.handlers import data  # Now using modernized data handler
+from src.handlers import auth, storage, receipts
+from src.handlers import analyze  # Using improved analyze handler
+from src.handlers import analyze_async  # Async analysis with SQS
+from src.handlers import model_config  # Model configuration management
 
 # Note: Using improved analyze handler with two-stage AI processing
 
