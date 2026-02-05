@@ -102,13 +102,14 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         )
 
         # Create tenant-specific database client
-        tenant_db = TenantManager.create_ibex_client(tenant_config)
+        # Create tenant-specific database client with Optimized Client
+        tenant_db = TenantManager.create_ibex_client(tenant_config, client_class=IbexClient)
         
-        # Also enable direct lambda for tenant client if needed
-        # (Assuming TenantManager creates base IbexClient, we might need to cast/modify it)
-        # However, TenantManager usually imports IbexClient. We need to check TenantManager code if we want it to be optimized.
-        # For now, base DB client works for App. Tenant DB is for data access.
-        # Ideally TenantManager should also use OptimizedIbexClient.
+        # Enable Direct Lambda Invocation for tenant client
+        # This is CRITICAL because we are not using API Keys
+        if IBEX_LAMBDA_NAME:
+            tenant_db.enable_direct_lambda(function_name=IBEX_LAMBDA_NAME, use_for_writes_only=False)
+            logger.debug(f"Direct Lambda Invocation enabled for tenant DB: {IBEX_LAMBDA_NAME}")
 
         logger.debug(f"Tenant DB initialized for namespace: {tenant_config['namespace']}")
 
