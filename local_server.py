@@ -6,7 +6,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from dotenv import load_dotenv
 
-## Load env vars from .env file
+## Load env vars from .env file.
 load_dotenv()
 
 # Configuration
