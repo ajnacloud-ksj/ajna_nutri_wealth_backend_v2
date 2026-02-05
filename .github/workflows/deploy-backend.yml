@@ -27,7 +27,7 @@ jobs:
       memory-size: 1024  # 1GB for better performance
       
       # Environment Variables (non-sensitive)
-      environment-variables: "ENABLE_LAMBDA_ASYNC=true,IBEX_LAMBDA_NAME=${{ vars.IBEX_LAMBDA_NAME }},IBEX_API_URL=${{ vars.IBEX_API_URL }}"
+      environment-variables: "AUTH_MODE=cognito,ENABLE_LAMBDA_ASYNC=true,IBEX_LAMBDA_NAME=${{ vars.IBEX_LAMBDA_NAME }},IBEX_API_URL=${{ vars.IBEX_API_URL }}"
       
       # Working directory (where Dockerfile is located)
       working-directory: '.'
