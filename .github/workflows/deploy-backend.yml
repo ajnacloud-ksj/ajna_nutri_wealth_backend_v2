@@ -22,8 +22,9 @@ jobs:
       # Lambda function name (must exist in AWS Lambda)
       lambda-function-name: 'ajna_nutri_wealth_backend_v2'
       
-
-      
+      # Lambda Configuration
+      timeout: 300  # 5 minutes for AI processing
+      memory-size: 1024  # 1GB for better performance
       
       # Environment Variables (non-sensitive)
       environment-variables: "IBEX_LAMBDA_NAME=${{ vars.IBEX_LAMBDA_NAME }},IBEX_API_URL=${{ vars.IBEX_API_URL }}"
