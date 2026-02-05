@@ -11,12 +11,8 @@ COPY src/requirements.txt ${LAMBDA_TASK_ROOT}
 RUN uv pip install --system -r ${LAMBDA_TASK_ROOT}/requirements.txt
 
 # Copy function code
-# Copy function code
 COPY src/ ${LAMBDA_TASK_ROOT}/src/
 COPY local_server.py ${LAMBDA_TASK_ROOT}/
-
-# Copy schemas for model configuration
-COPY src/schemas/ ${LAMBDA_TASK_ROOT}/schemas/
 
 # Ensure correct permissions for Lambda execution
 RUN chmod -R 755 ${LAMBDA_TASK_ROOT}
