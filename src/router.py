@@ -4,6 +4,7 @@ Modern API Router with Clean Handler Imports
 
 import re
 from typing import Dict, Any
+from src.utils.http import respond
 
 # Import modernized handlers
 from src.handlers import data  # Now using modernized data handler
