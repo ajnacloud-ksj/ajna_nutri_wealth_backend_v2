@@ -32,6 +32,10 @@
             "type": "integer",
             "required": false
         },
+        "last_usage_date": {
+            "type": "string",
+            "required": false
+        },
         "created_at": {
             "type": "timestamp",
             "required": false

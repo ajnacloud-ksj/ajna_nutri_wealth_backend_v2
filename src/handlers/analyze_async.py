@@ -172,46 +172,6 @@ def get_analysis_status(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[
         return respond(500, {"error": str(e)})
 
 
-def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    """
-    Process async Lambda Event invocation
-    This is called when Lambda invokes itself with InvocationType='Event'
-    """
-    entry_id = event.get('entry_id')
-    user_id = event.get('user_id')
-    description = event.get('description')
-    image_url = event.get('image_url')
-    
-    logger.info(f"Processing async request", entry_id=entry_id, user_id=user_id)
-    
-    try:
-        # Import and call the sync analyze handler
-        from handlers.analyze import analyze_food
-        
-        # Create a mock HTTP event for the analyze handler
-        http_event = {
-            'body': json.dumps({
-                'description': description,
-                'image_url': image_url,
-                'user_id': user_id
-            }),
-            'headers': {
-                'x-user-id': user_id,
-                'x-tenant-id': 'default'
-            }
-        }
-        
-        # Process the analysis
-        result = analyze_food(http_event, context)
-        
-        # Update status in pending_analyses
-        db = context.get('db')
-        if db and result.get('statusCode') == 200:
-            result_body = json.loads(result.get('body', '{}'))
-            db.update("pending_analyses",
-                     filters=[{"field": "id", "operator": "eq", "value": entry_id}],
-                     data={
-                         "status": "completed",
                          "result": json.dumps(result_body),
                          "completed_at": datetime.utcnow().isoformat()
                      })
