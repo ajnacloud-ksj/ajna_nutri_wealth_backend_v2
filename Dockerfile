@@ -12,10 +12,11 @@ RUN uv pip install --system -r ${LAMBDA_TASK_ROOT}/requirements.txt
 
 # Copy function code
 COPY src/ ${LAMBDA_TASK_ROOT}/src/
+COPY src/app.py ${LAMBDA_TASK_ROOT}/app.py
 COPY local_server.py ${LAMBDA_TASK_ROOT}/
 
 # Ensure correct permissions for Lambda execution
 RUN chmod -R 755 ${LAMBDA_TASK_ROOT}
 
 # Set the CMD to handler
-CMD [ "src.app.lambda_handler" ]
+CMD [ "app.lambda_handler" ]
