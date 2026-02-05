@@ -64,6 +64,10 @@ def route_request(event, context):
     """
     # Support both API Gateway (v1) and Function URL (v2) event formats
     path = event.get('rawPath') or event.get('path', '')
+
+    # Normalize Path: Replace multiple slashes with single slash (e.g. //v1 -> /v1)
+    # This handles frontend config errors where API_URL has trailing slash
+    path = re.sub(r'//+', '/', path)
     method = event.get('httpMethod') or event.get('requestContext', {}).get('http', {}).get('method', 'GET')
 
     # Remove trailing slash for consistency
