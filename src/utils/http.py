@@ -33,30 +33,9 @@ def get_allowed_origins():
         ]
 
 
-def get_cors_headers(event: Dict[str, Any] = None) -> Dict[str, str]:
-    """Get appropriate CORS headers based on request origin"""
-    if not event:
-        event = {}
-
-    origin = event.get('headers', {}).get('origin', '')
-    allowed_origins = get_allowed_origins()
-
-    # Check if origin is allowed
-    if origin in allowed_origins:
-        cors_origin = origin
-    elif os.environ.get('ENVIRONMENT') == 'development':
-        # In development, allow any origin
-        cors_origin = '*'
-    else:
-        # In production/staging, use first allowed origin as default
-        cors_origin = allowed_origins[0] if allowed_origins else '*'
-
-    return {
-        'Access-Control-Allow-Origin': cors_origin,
-        'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-User-Id,X-Tenant-Id',
-        'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS,PATCH',
-        'Access-Control-Allow-Credentials': 'true' if cors_origin != '*' else 'false'
-    }
+    # AWS Lambda Function URL handles CORS (configured to return *)
+    # We must NOT return duplicate headers, or browsers will block the request.
+    return {}
 
 
 def respond(status_code, body, is_base64=False, event=None):
