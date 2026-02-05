@@ -29,5 +29,5 @@ jobs:
       image-uri: ${{ needs.build-and-push.outputs.image-uri }}
       role-to-assume: arn:aws:iam::808527335982:role/GitHubActions-Deploy-Role
       # Pass environment variables (Secrets are automatically injected by reusable workflow)
-      environment-variables: "AUTH_MODE=cognito,ENABLE_LAMBDA_ASYNC=true,IBEX_LAMBDA_NAME=${{ vars.IBEX_LAMBDA_NAME }},IBEX_API_URL=${{ vars.IBEX_API_URL }}"
+      environment-variables: "AUTH_MODE=cognito,ENABLE_LAMBDA_ASYNC=true,IBEX_LAMBDA_NAME=${{ vars.IBEX_LAMBDA_NAME }},IBEX_API_URL=${{ vars.IBEX_API_URL }},COGNITO_REGION=ap-south-1"
     secrets: inherit
