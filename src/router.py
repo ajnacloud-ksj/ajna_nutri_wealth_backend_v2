@@ -62,8 +62,9 @@ def route_request(event, context):
     """
     Matches method and path to a handler.
     """
-    path = event.get('path', '')
-    method = event.get('httpMethod', 'GET')
+    # Support both API Gateway (v1) and Function URL (v2) event formats
+    path = event.get('rawPath') or event.get('path', '')
+    method = event.get('httpMethod') or event.get('requestContext', {}).get('http', {}).get('method', 'GET')
 
     # Remove trailing slash for consistency
     if path.endswith('/') and len(path) > 1:
