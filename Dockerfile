@@ -15,6 +15,9 @@ COPY src/ ${LAMBDA_TASK_ROOT}/src/
 COPY src/app.py ${LAMBDA_TASK_ROOT}/app.py
 COPY local_server.py ${LAMBDA_TASK_ROOT}/
 
+# Add src to PYTHONPATH so relative imports work
+ENV PYTHONPATH="${LAMBDA_TASK_ROOT}/src:${PYTHONPATH}"
+
 # Ensure correct permissions for Lambda execution
 RUN chmod -R 755 ${LAMBDA_TASK_ROOT}
 
