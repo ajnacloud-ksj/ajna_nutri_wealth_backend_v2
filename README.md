@@ -214,5 +214,5 @@ MIT
 
 ---
 
-**Last Updated:** February 2, 2026
-**Version:** 2.0.0
+**Last Updated:** February 4, 2026  
+**Version:** 2.1.0 - Async Lambda + Cognito Auth
