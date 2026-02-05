@@ -28,6 +28,6 @@ jobs:
       lambda-function-name: ajna_nutri_wealth_backend_v2
       image-uri: ${{ needs.build-and-push.outputs.image-uri }}
       role-to-assume: arn:aws:iam::808527335982:role/GitHubActions-Deploy-Role
-      # Pass all environment variables explicitly
-      environment-variables: "AUTH_MODE=cognito,ENABLE_LAMBDA_ASYNC=true,IBEX_LAMBDA_NAME=${{ vars.IBEX_LAMBDA_NAME }},IBEX_API_URL=${{ vars.IBEX_API_URL }},COGNITO_USER_POOL_ID=${{ secrets.COGNITO_USER_POOL_ID }},COGNITO_CLIENT_ID=${{ secrets.COGNITO_CLIENT_ID }},IBEX_API_KEY=${{ secrets.IBEX_API_KEY }},OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}"
+      # Pass environment variables (Secrets are automatically injected by reusable workflow)
+      environment-variables: "AUTH_MODE=cognito,ENABLE_LAMBDA_ASYNC=true,IBEX_LAMBDA_NAME=${{ vars.IBEX_LAMBDA_NAME }},IBEX_API_URL=${{ vars.IBEX_API_URL }}"
     secrets: inherit
