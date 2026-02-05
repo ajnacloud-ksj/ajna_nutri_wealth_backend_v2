@@ -18,5 +18,8 @@ COPY local_server.py ${LAMBDA_TASK_ROOT}/
 # Copy schemas for model configuration
 COPY src/schemas/ ${LAMBDA_TASK_ROOT}/schemas/
 
+# Ensure correct permissions for Lambda execution
+RUN chmod -R 755 ${LAMBDA_TASK_ROOT}
+
 # Set the CMD to optimized handler for better performance
 CMD [ "src.app_optimized.lambda_handler" ]
