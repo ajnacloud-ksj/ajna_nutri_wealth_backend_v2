@@ -70,6 +70,11 @@ def route_request(event, context):
     path = re.sub(r'//+', '/', path)
     method = event.get('httpMethod') or event.get('requestContext', {}).get('http', {}).get('method', 'GET')
 
+    # Handle OPTIONS requests for CORS (Pre-flight)
+    # Since AWS handles headers, we just need to return 200 OK
+    if method == 'OPTIONS':
+        return respond(200, {})
+
     # Remove trailing slash for consistency
     if path.endswith('/') and len(path) > 1:
         path = path[:-1]
