@@ -14,17 +14,17 @@ from lib.logger import logger
 from utils.http import respond
 
 
-# SQS configuration - check environment variables
+# Lambda async configuration - check environment variables
 import os
-SQS_ENABLED = os.environ.get('ENABLE_SQS', 'false').lower() == 'true'
-QUEUE_URL = os.environ.get('AI_PROCESSING_QUEUE_URL', '')
+LAMBDA_ASYNC_ENABLED = os.environ.get('ENABLE_LAMBDA_ASYNC', 'false').lower() == 'true'
+LAMBDA_FUNCTION_NAME = os.environ.get('AWS_LAMBDA_FUNCTION_NAME', '')
 
-# Initialize SQS client if enabled
-if SQS_ENABLED and QUEUE_URL:
-    aws_region = os.environ.get('AWS_REGION', 'us-east-1')
-    sqs = boto3.client('sqs', region_name=aws_region)
+# Initialize Lambda client if async enabled
+if LAMBDA_ASYNC_ENABLED:
+    aws_region = os.environ.get('AWS_REGION', 'ap-south-1')
+    lambda_client = boto3.client('lambda', region_name=aws_region)
 else:
-    sqs = None
+    lambda_client = None
 
 
 def submit_analysis(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
@@ -49,10 +49,11 @@ def submit_analysis(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str,
     # Generate unique entry ID
     entry_id = str(uuid.uuid4())
 
-    if SQS_ENABLED and sqs:
-        # Submit to SQS queue
+    if LAMBDA_ASYNC_ENABLED and lambda_client:
+        # Submit via Lambda Event invocation
         try:
-            message = {
+            payload = {
+                "source": "async-processing",
                 "entry_id": entry_id,
                 "user_id": user_id,
                 "description": description,
@@ -61,18 +62,15 @@ def submit_analysis(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str,
                 "timestamp": datetime.utcnow().isoformat()
             }
 
-            response = sqs.send_message(
-                QueueUrl=QUEUE_URL,
-                MessageBody=json.dumps(message),
-                MessageAttributes={
-                    'user_id': {'StringValue': user_id, 'DataType': 'String'},
-                    'entry_id': {'StringValue': entry_id, 'DataType': 'String'}
-                }
+            response = lambda_client.invoke(
+                FunctionName=LAMBDA_FUNCTION_NAME,
+                InvocationType='Event',  # Async invocation
+                Payload=json.dumps(payload)
             )
 
-            logger.info(f"Submitted async analysis",
+            logger.info(f"Submitted async analysis via Lambda Event",
                        entry_id=entry_id,
-                       message_id=response['MessageId'])
+                       status_code=response['StatusCode'])
 
             # Store pending status in DB
             db = context.get('db')
@@ -94,11 +92,11 @@ def submit_analysis(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str,
             })
 
         except Exception as e:
-            logger.error(f"Failed to submit to SQS: {e}")
+            logger.error(f"Failed to invoke Lambda async: {e}")
             # Fall through to sync processing
 
     # Fallback to synchronous processing
-    logger.info("SQS not enabled, falling back to sync processing")
+    logger.info("Lambda async not enabled, falling back to sync processing")
 
     # Import sync handler
     from handlers.analyze import analyze_food
@@ -116,6 +114,7 @@ def submit_analysis(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str,
         })
 
     return sync_result
+
 
 
 def get_analysis_status(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
@@ -171,6 +170,82 @@ def get_analysis_status(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[
     except Exception as e:
         logger.error(f"Error getting analysis status: {e}")
         return respond(500, {"error": str(e)})
+
+
+def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """
+    Process async Lambda Event invocation
+    This is called when Lambda invokes itself with InvocationType='Event'
+    """
+    entry_id = event.get('entry_id')
+    user_id = event.get('user_id')
+    description = event.get('description')
+    image_url = event.get('image_url')
+    
+    logger.info(f"Processing async request", entry_id=entry_id, user_id=user_id)
+    
+    try:
+        # Import and call the sync analyze handler
+        from handlers.analyze import analyze_food
+        
+        # Create a mock HTTP event for the analyze handler
+        http_event = {
+            'body': json.dumps({
+                'description': description,
+                'image_url': image_url,
+                'user_id': user_id
+            }),
+            'headers': {
+                'x-user-id': user_id,
+                'x-tenant-id': 'default'
+            }
+        }
+        
+        # Process the analysis
+        result = analyze_food(http_event, context)
+        
+        # Update status in pending_analyses
+        db = context.get('db')
+        if db and result.get('statusCode') == 200:
+            result_body = json.loads(result.get('body', '{}'))
+            db.update("pending_analyses",
+                     filters=[{"field": "id", "operator": "eq", "value": entry_id}],
+                     data={
+                         "status": "completed",
+                         "result": json.dumps(result_body),
+                         "completed_at": datetime.utcnow().isoformat()
+                     })
+            logger.info(f"Async analysis completed", entry_id=entry_id)
+        else:
+            # Mark as failed
+            if db:
+                db.update("pending_analyses",
+                         filters=[{"field": "id", "operator": "eq", "value": entry_id}],
+                         data={
+                             "status": "failed",
+                             "error": "Analysis failed",
+                             "failed_at": datetime.utcnow().isoformat()
+                         })
+            logger.error(f"Async analysis failed", entry_id=entry_id)
+        
+        return {"statusCode": 200, "body": json.dumps({"success": True})}
+        
+    except Exception as e:
+        logger.error(f"Error processing async request: {e}", entry_id=entry_id)
+        # Try to update status to failed
+        try:
+            db = context.get('db')
+            if db:
+                db.update("pending_analyses",
+                         filters=[{"field": "id", "operator": "eq", "value": entry_id}],
+                         data={
+                             "status": "failed",
+                             "error": str(e),
+                             "failed_at": datetime.utcnow().isoformat()
+                         })
+        except:
+            pass
+        return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
 
 
 def process_queue_message(event: Dict[str, Any], context: Any) -> Dict[str, Any]:

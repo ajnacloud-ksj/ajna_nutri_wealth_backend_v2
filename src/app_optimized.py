@@ -63,24 +63,31 @@ DB_CONFIG = {
 # AI service doesn't need config - it reads from environment
 
 
-def lambda_handler(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    Main Lambda handler - Optimized Version
+    Main Lambda handler
+    Routes requests to appropriate handlers
     """
     try:
-        # Get tenant configuration from request
-        tenant_config = TenantManager.get_tenant_from_request(event)
-        tenant_id = tenant_config['tenant_id']
-        user_id = event.get('headers', {}).get('x-user-id')
+        # Check if this is an async processing request
+        if event.get('source') == 'async-processing':
+            logger.info("Processing async Lambda Event invocation")
+            from handlers import analyze_async
+            return analyze_async.process_async_request(event, context)
+        
+        # Get tenant configuration
+        tenant_config = TenantManager.get_tenant_config(event)
+        tenant_id = tenant_config['tenant_id'] # Keep tenant_id extraction for later use
+        user_id = event.get('headers', {}).get('x-user-id') # Keep user_id extraction for prefetch
 
-        # Create tenant-specific DB client
+        # Create tenant-specific database client
         tenant_db = TenantManager.create_ibex_client(tenant_config, client_class=IbexClient)
-
-        # If using OptimizedIbexClient, enable direct Lambda in AWS environment
+        
+        # Enable direct Lambda invocation if configured
         lambda_name = os.environ.get('IBEX_LAMBDA_NAME') or os.environ.get('AWS_LAMBDA_FUNCTION_NAME')
         if hasattr(tenant_db, 'enable_direct_lambda') and lambda_name:
-            # Enable direct Lambda invocation for better performance
             tenant_db.enable_direct_lambda(lambda_name)
+            logger.info(f"Direct Lambda invocation enabled for: {lambda_name}")
 
         # If user_id is provided and we have OptimizedIbexClient, prefetch user data
         if user_id and hasattr(tenant_db, 'prefetch_user_data'):
