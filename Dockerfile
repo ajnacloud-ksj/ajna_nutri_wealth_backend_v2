@@ -11,12 +11,12 @@ COPY src/requirements.txt ${LAMBDA_TASK_ROOT}
 RUN uv pip install --system -r ${LAMBDA_TASK_ROOT}/requirements.txt
 
 # Copy function code
-COPY src/ ${LAMBDA_TASK_ROOT}/
+# Copy function code
+COPY src/ ${LAMBDA_TASK_ROOT}/src/
 COPY local_server.py ${LAMBDA_TASK_ROOT}/
-COPY app_optimized.py ${LAMBDA_TASK_ROOT}/
 
 # Copy schemas for model configuration
 COPY src/schemas/ ${LAMBDA_TASK_ROOT}/schemas/
 
 # Set the CMD to optimized handler for better performance
-CMD [ "app_optimized.lambda_handler" ]
+CMD [ "src.app_optimized.lambda_handler" ]
