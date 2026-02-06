@@ -83,7 +83,7 @@ def get_analysis_status(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     try:
         path_params = event.get('pathParameters', {})
-        entry_id = path_params.get('id')
+        entry_id = path_params.get('entry_id') or path_params.get('id')
         
         if not entry_id:
             return respond(400, {"error": "Missing entry ID"})
