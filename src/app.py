@@ -94,7 +94,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Check if this is an async processing request (not an HTTP request)
         if event.get('source') == 'async-processing':
             logger.info("Processing async Lambda invocation")
-            from src.handlers import analyze_async
+            from handlers import analyze_async
             return analyze_async.process_async_request(event, context)
         
         # Get tenant configuration from request
