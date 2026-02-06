@@ -212,7 +212,7 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
             
             # Store result based on category
             if category == 'food':
-                _store_food_result(db, user_id, entry_id, data)
+                _store_food_result(db, user_id, entry_id, data, image_url)
             elif category == 'receipt':
                 _store_receipt_result(db, user_id, entry_id, data, image_url)
             
@@ -256,7 +256,7 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
         return {"statusCode": 500, "body": str(e)}
 
 
-def _store_food_result(db, user_id: str, entry_id: str, data: Dict):
+def _store_food_result(db, user_id: str, entry_id: str, data: Dict, image_url: str):
     """Store food analysis result"""
     food_items = data.get('food_items', [])
     total_calories = sum(item.get('calories', 0) for item in food_items)
@@ -267,6 +267,7 @@ def _store_food_result(db, user_id: str, entry_id: str, data: Dict):
         "description": food_items[0].get('name', 'Food') if food_items else 'Food',
         "meal_type": data.get('meal_type', 'snack'),
         "calories": total_calories,
+        "image_url": image_url or '',
         "extracted_nutrients": json.dumps(data),
         "created_at": datetime.utcnow().isoformat()
     }])
