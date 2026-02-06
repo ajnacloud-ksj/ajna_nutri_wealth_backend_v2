@@ -204,7 +204,7 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
             # Update pending_analyses status
             db.update("pending_analyses",
                      filters=[{"field": "id", "operator": "eq", "value": entry_id}],
-                     data={
+                     updates={
                          "status": "completed",
                          "category": category,
                          "completed_at": datetime.utcnow().isoformat()
@@ -215,7 +215,7 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
             error_msg = result.get('error', 'Unknown error')
             db.update("pending_analyses",
                      filters=[{"field": "id", "operator": "eq", "value": entry_id}],
-                     data={
+                     updates={
                          "status": "failed",
                          "error": error_msg,
                          "failed_at": datetime.utcnow().isoformat()
@@ -231,7 +231,7 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
              if 'db' in locals():
                 db.update("pending_analyses",
                          filters=[{"field": "id", "operator": "eq", "value": entry_id}],
-                         data={
+                         updates={
                              "status": "failed",
                              "error": str(e),
                              "failed_at": datetime.utcnow().isoformat()
