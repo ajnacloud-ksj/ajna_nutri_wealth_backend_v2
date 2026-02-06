@@ -181,7 +181,11 @@ class OptimizedIbexClient:
         # Check cache for read operations
         operation = payload.get("operation", "")
         if use_cache and operation in ["QUERY", "LIST_TABLES", "DESCRIBE_TABLE"]:
-            cache_key = self._get_cache_key(operation, **payload)
+            # Remove operation from payload to avoid duplicate argument error
+            cache_params = payload.copy()
+            if "operation" in cache_params:
+                del cache_params["operation"]
+            cache_key = self._get_cache_key(operation, **cache_params)
             cached_result = self._get_from_cache(cache_key)
 
             if cached_result is not None:
@@ -198,7 +202,11 @@ class OptimizedIbexClient:
         # Cache successful read operations
         if use_cache and operation in ["QUERY", "LIST_TABLES", "DESCRIBE_TABLE"]:
             if result.get("success"):
-                cache_key = self._get_cache_key(operation, **payload)
+                # Remove operation from payload to avoid duplicate argument error
+                cache_params = payload.copy()
+                if "operation" in cache_params:
+                    del cache_params["operation"]
+                cache_key = self._get_cache_key(operation, **cache_params)
                 ttl = READ_CACHE_TTL if operation == "QUERY" else CACHE_TTL_SECONDS
                 self._put_in_cache(cache_key, result, ttl)
 
