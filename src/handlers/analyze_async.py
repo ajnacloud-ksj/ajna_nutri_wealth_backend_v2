@@ -179,7 +179,7 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
         ai_service = OptimizedAIService(db)
 
         # Process with AI
-        result = ai_service.analyze_image_or_text(
+        result = ai_service.process_request(
             user_id=user_id,
             description=description,
             image_url=image_url
