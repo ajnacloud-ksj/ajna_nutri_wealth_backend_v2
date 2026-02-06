@@ -66,7 +66,7 @@ def submit_analysis(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         )
         
         return respond(202, {
-            "id": entry_id,
+            "entry_id": entry_id,
             "status": "pending",
             "message": "Analysis started"
         })
