@@ -176,6 +176,12 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
             tenant_id=db_config.tenant_id,
             namespace=db_config.namespace
         )
+        
+        # Enable Direct Lambda invocation to avoid 403 errors
+        lambda_name = os.environ.get('IBEX_LAMBDA_NAME') or os.environ.get('AWS_LAMBDA_FUNCTION_NAME')
+        if hasattr(db, 'enable_direct_lambda') and lambda_name:
+            db.enable_direct_lambda(lambda_name)
+            logger.info(f\"Direct Lambda invocation enabled for async processing: {lambda_name}\")\n        
         ai_service = OptimizedAIService(db)
 
         # Process with AI
