@@ -106,7 +106,8 @@ def get_analysis_status(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         result = db.query("app_pending_analyses", 
                          filters=[
                              {"field": "id", "operator": "eq", "value": entry_id},
-                             {"field": "user_id", "operator": "eq", "value": user_id}
+                             {"field": "user_id", "operator": "eq", "value": user_id},
+                             {"field": "id", "operator": "neq", "value": f"bust_{datetime.utcnow().timestamp()}"}
                          ],
                          limit=1,
                          use_cache=False)
