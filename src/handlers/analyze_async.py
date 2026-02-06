@@ -38,7 +38,7 @@ def submit_analysis(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         # 1. Create pending record
         db = context.get('db')
-        db.write("pending_analyses", [{
+        db.write("app_pending_analyses", [{
             "id": entry_id,
             "user_id": user_id,
             "status": "pending",
@@ -103,7 +103,7 @@ def get_analysis_status(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         # Query pending_analyses table
         logger.info(f"Checking status for entry_id: {entry_id}, user_id: {user_id}")
-        result = db.query("pending_analyses", 
+        result = db.query("app_pending_analyses", 
                          filters=[
                              {"field": "id", "operator": "eq", "value": entry_id},
                              {"field": "user_id", "operator": "eq", "value": user_id}
@@ -215,7 +215,7 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
                 _store_receipt_result(db, user_id, entry_id, data, image_url)
             
             # Update pending_analyses status
-            db.update("pending_analyses",
+            db.update("app_pending_analyses",
                      filters=[{"field": "id", "operator": "eq", "value": entry_id}],
                      updates={
                          "status": "completed",
@@ -226,7 +226,7 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
             logger.info("Async analysis completed successfully", extra={'entry_id': entry_id})
         else:
             error_msg = result.get('error', 'Unknown error')
-            db.update("pending_analyses",
+            db.update("app_pending_analyses",
                      filters=[{"field": "id", "operator": "eq", "value": entry_id}],
                      updates={
                          "status": "failed",
@@ -242,7 +242,7 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
         # Try to mark as failed if DB available
         try:
              if 'db' in locals():
-                db.update("pending_analyses",
+                db.update("app_pending_analyses",
                          filters=[{"field": "id", "operator": "eq", "value": entry_id}],
                          updates={
                              "status": "failed",
