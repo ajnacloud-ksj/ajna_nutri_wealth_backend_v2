@@ -96,12 +96,14 @@ def get_analysis_status(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         db = context.get('db')
         
         # Query pending_analyses table
+        logger.info(f"Checking status for entry_id: {entry_id}, user_id: {user_id}")
         result = db.query("pending_analyses", 
                          filters=[
                              {"field": "id", "operator": "eq", "value": entry_id},
                              {"field": "user_id", "operator": "eq", "value": user_id}
                          ],
                          limit=1)
+        logger.info(f"Query result success: {result.get('success')}, records: {len(result.get('data', {}).get('records', []))}")
         
         if result.get('success') and result.get('data', {}).get('records'):
             record = result['data']['records'][0]
