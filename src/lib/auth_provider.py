@@ -137,11 +137,13 @@ class CognitoAuthProvider(AuthProvider):
 
             # Decode and verify token
             signing_key = jwks_client.get_signing_key_from_jwt(token)
+            # Decode and verify token with 60s leeway for clock drift
             decoded = jwt.decode(
                 token,
                 signing_key.key,
                 algorithms=["RS256"],
                 audience=self.client_id,
+                leeway=60,
                 options={"verify_exp": True}
             )
 
