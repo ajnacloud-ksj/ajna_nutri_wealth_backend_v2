@@ -172,11 +172,16 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
         # Note: We create new instances because context might not be fully populated in async event
         from src.config.settings import settings
         db_config = settings.config.database
+        
+        # Use tenant info from payload if available
+        final_tenant_id = payload.get('tenant_id') or db_config.tenant_id
+        final_namespace = payload.get('namespace') or db_config.namespace
+        
         db = IbexClient(
             api_url=db_config.api_url,
             api_key=db_config.api_key,
-            tenant_id=db_config.tenant_id,
-            namespace=db_config.namespace
+            tenant_id=final_tenant_id,
+            namespace=final_namespace
         )
         
         # Enable Direct Lambda invocation to avoid 403 errors
