@@ -55,6 +55,12 @@ def submit_analysis(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             "image_url": image_url
         }
         
+        # Add tenant context if available
+        tenant = context.get('tenant')
+        if tenant:
+             payload['tenant_id'] = tenant.get('tenant_id')
+             payload['namespace'] = tenant.get('namespace')
+        
         lambda_client = boto3.client('lambda')
         # Use current function name or from env
         function_name = os.environ.get('AWS_LAMBDA_FUNCTION_NAME')
