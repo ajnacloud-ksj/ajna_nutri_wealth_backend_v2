@@ -13,6 +13,7 @@ RUN uv pip install --system -r ${LAMBDA_TASK_ROOT}/requirements.txt
 # Copy function code
 COPY src/ ${LAMBDA_TASK_ROOT}/src/
 COPY src/app.py ${LAMBDA_TASK_ROOT}/app.py
+COPY src/schemas ${LAMBDA_TASK_ROOT}/schemas
 COPY local_server.py ${LAMBDA_TASK_ROOT}/
 
 # Add src to PYTHONPATH so relative imports work
