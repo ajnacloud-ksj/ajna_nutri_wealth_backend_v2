@@ -108,7 +108,8 @@ def get_analysis_status(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                              {"field": "id", "operator": "eq", "value": entry_id},
                              {"field": "user_id", "operator": "eq", "value": user_id}
                          ],
-                         limit=1)
+                         limit=1,
+                         use_cache=False)
         logger.info(f"Query result success: {result.get('success')}, records: {len(result.get('data', {}).get('records', []))}")
         
         if result.get('success') and result.get('data', {}).get('records'):
