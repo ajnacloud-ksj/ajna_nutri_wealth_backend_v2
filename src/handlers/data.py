@@ -111,7 +111,7 @@ def list_data(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         if offset > 0:
             kwargs["offset"] = offset
 
-        result = db.query(db_table_name, **kwargs)
+        result = db.query(db_table_name, use_cache=False, **kwargs)
 
         if result and result.get('success'):
             data = result.get('data', {})
