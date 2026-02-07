@@ -144,10 +144,20 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Get tenant configuration from request
         tenant_config = TenantManager.get_tenant_from_request(event)
 
+        # Ensure we have a valid tenant config
+        if not tenant_config:
+            logger.warning("No tenant config found, using default")
+            tenant_config = {
+                "tenant_id": "nutriwealth",
+                "namespace": "default",
+                "display_name": "NutriWealth Default",
+                "features": ["all"]
+            }
+
         logger.info(
             "Processing request",
-            tenant_id=tenant_config['tenant_id'],
-            tenant_name=tenant_config['display_name'],
+            tenant_id=tenant_config.get('tenant_id', 'nutriwealth'),
+            tenant_name=tenant_config.get('display_name', 'Default'),
             request_id=request_id
         )
 

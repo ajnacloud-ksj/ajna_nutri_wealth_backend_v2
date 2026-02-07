@@ -107,7 +107,22 @@ class TenantManager:
                     return config
 
         # 4. Default to configured default tenant
-        return cls._tenant_config.get(cls._default_tenant, cls._tenant_config.get('nutriwealth'))
+        default_config = cls._tenant_config.get(cls._default_tenant)
+        if default_config:
+            return default_config
+
+        # 5. Fallback to nutriwealth config
+        nutriwealth_config = cls._tenant_config.get('nutriwealth')
+        if nutriwealth_config:
+            return nutriwealth_config
+
+        # 6. Last resort - return a default config
+        return {
+            "tenant_id": "nutriwealth",
+            "namespace": "default",
+            "display_name": "NutriWealth Default",
+            "features": ["all"]
+        }
 
     @classmethod
     def has_feature(cls, tenant_config: Dict[str, Any], feature: str) -> bool:
