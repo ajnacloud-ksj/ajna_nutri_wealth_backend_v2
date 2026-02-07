@@ -273,9 +273,12 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
             elif category == 'receipt':
                 _store_receipt_result(db, user_id, entry_id, data, image_url)
             
-            # Update pending_analyses status
+            # Update pending_analyses status - MUST include user_id in filter!
             db.update("app_pending_analyses",
-                     filters=[{"field": "id", "operator": "eq", "value": entry_id}],
+                     filters=[
+                         {"field": "id", "operator": "eq", "value": entry_id},
+                         {"field": "user_id", "operator": "eq", "value": user_id}
+                     ],
                      updates={
                          "status": "completed",
                          "category": category,
@@ -286,7 +289,10 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
         else:
             error_msg = result.get('error', 'Unknown error')
             db.update("app_pending_analyses",
-                     filters=[{"field": "id", "operator": "eq", "value": entry_id}],
+                     filters=[
+                         {"field": "id", "operator": "eq", "value": entry_id},
+                         {"field": "user_id", "operator": "eq", "value": user_id}
+                     ],
                      updates={
                          "status": "failed",
                          "error": error_msg,
@@ -300,9 +306,12 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
         logger.error(f"Critical error in process_async_request: {e}", exc_info=True)
         # Try to mark as failed if DB available
         try:
-             if 'db' in locals():
+            if 'db' in locals() and 'entry_id' in locals() and 'user_id' in locals():
                 db.update("app_pending_analyses",
-                         filters=[{"field": "id", "operator": "eq", "value": entry_id}],
+                         filters=[
+                             {"field": "id", "operator": "eq", "value": entry_id},
+                             {"field": "user_id", "operator": "eq", "value": user_id}
+                         ],
                          updates={
                              "status": "failed",
                              "error": str(e),
