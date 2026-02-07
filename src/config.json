@@ -1,5 +1,5 @@
 {
     "ibex_api_url": "https://smartlink.ajna.cloud/ibexdb",
-    "tenant_id": "test-tenant",
+    "tenant_id": "nutriwealth",
     "namespace": "default"
 }
