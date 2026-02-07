@@ -77,13 +77,24 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 logger.info("Processing SQS messages")
 
                 # For SQS, we need to set up the database context
-                # Use default tenant configuration for internal processing
-                tenant_config = {
-                    'tenant_id': 'default',
-                    'namespace': 'default'
-                }
+                # Extract tenant info from the first message (all messages in batch should be from same tenant)
+                try:
+                    import json
+                    message_body = json.loads(first_record.get('body', '{}'))
+                    # Get tenant info from message payload
+                    tenant_config = {
+                        'tenant_id': message_body.get('tenant_id', 'default'),
+                        'namespace': message_body.get('namespace', 'default')
+                    }
+                except Exception as e:
+                    logger.warning(f"Could not extract tenant from SQS message: {e}")
+                    # Fallback to default if message parsing fails
+                    tenant_config = {
+                        'tenant_id': 'default',
+                        'namespace': 'default'
+                    }
 
-                # Create database client for SQS processing
+                # Create database client for SQS processing with proper tenant
                 tenant_db = TenantManager.create_ibex_client(tenant_config, client_class=IbexClient)
 
                 # Add to context
