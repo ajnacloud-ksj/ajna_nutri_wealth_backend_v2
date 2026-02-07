@@ -118,11 +118,10 @@ def get_analysis_status(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         # Query pending_analyses table
         logger.info(f"Checking status for entry_id: {entry_id}, user_id: {user_id}")
-        result = db.query("app_pending_analyses", 
+        result = db.query("app_pending_analyses",
                          filters=[
                              {"field": "id", "operator": "eq", "value": entry_id},
-                             {"field": "user_id", "operator": "eq", "value": user_id},
-                             {"field": "status", "operator": "ne", "value": f"bust_{datetime.utcnow().timestamp()}"}
+                             {"field": "user_id", "operator": "eq", "value": user_id}
                          ],
                          limit=1,
                          use_cache=False)

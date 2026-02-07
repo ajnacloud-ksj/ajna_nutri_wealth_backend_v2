@@ -131,7 +131,7 @@ class Settings:
         return {
             'api_url': os.environ.get('IBEX_API_URL', 'https://smartlink.ajna.cloud/ibexdb'),
             'api_key': os.environ.get('IBEX_API_KEY', ''),
-            'tenant_id': os.environ.get('TENANT_ID', 'test-tenant'),
+            'tenant_id': os.environ.get('TENANT_ID', 'nutriwealth'),
             'namespace': os.environ.get('DB_NAMESPACE', 'default'),
             'connection_timeout': int(os.environ.get('DB_TIMEOUT', '20')),
             'max_retries': int(os.environ.get('DB_MAX_RETRIES', '3')),
