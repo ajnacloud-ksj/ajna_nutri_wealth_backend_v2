@@ -14,7 +14,7 @@ from src.handlers import analyze_async  # Async analysis with SQS
 from src.handlers import model_config  # Model configuration management
 from src.handlers import health  # Health check endpoints
 from src.handlers import database_admin  # Database setup and cleanup
-from src.handlers import user  # User profile management
+# from src.handlers import user  # User profile management - COMMENTED OUT UNTIL DEPLOYED
 
 # Note: Using improved analyze handler with two-stage AI processing
 
@@ -65,9 +65,9 @@ ROUTES = [
     ('POST', r'^/v1/storage/upload-url$', storage.get_upload_url_endpoint), # New: Get Presigned URL
     ('GET', r'^/v1/storage/(?P<path>.+)$', storage.get_file),
 
-    # User Profile (before generic data routes)
-    ('GET', r'^/v1/user/profile$', user.get_current_user),
-    ('GET', r'^/v1/user/(?P<id>[a-zA-Z0-9-]+)$', user.get_user_by_id),
+    # User Profile (before generic data routes) - COMMENTED OUT UNTIL DEPLOYED
+    # ('GET', r'^/v1/user/profile$', user.get_current_user),
+    # ('GET', r'^/v1/user/(?P<id>[a-zA-Z0-9-]+)$', user.get_user_by_id),
 
     # Generic Data (Last to avoid collisions)
     ('GET', r'^/v1/(?P<table>[a-zA-Z0-9_]+)$', data.list_data),
