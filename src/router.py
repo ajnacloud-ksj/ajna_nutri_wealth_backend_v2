@@ -12,12 +12,18 @@ from src.handlers import auth, storage, receipts
 from src.handlers import analyze  # Using improved analyze handler
 from src.handlers import analyze_async  # Async analysis with SQS
 from src.handlers import model_config  # Model configuration management
+from src.handlers import health  # Health check endpoints
 
 # Note: Using improved analyze handler with two-stage AI processing
 
 # Route Definition
 # (Method, PathPattern, Handler)
 ROUTES = [
+    # Health Check (at the top for monitoring priority)
+    ('GET', r'^/health$', health.check),
+    ('GET', r'^/ready$', health.ready),
+    ('GET', r'^/status$', health.status),
+
     # System
     ('POST', r'^/v1/system/create-database$', data.create_database),
     ('POST', r'^/v1/system/initialize-schemas$', data.initialize_schemas),

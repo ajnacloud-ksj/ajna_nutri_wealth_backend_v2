@@ -2,38 +2,65 @@ import json
 import uuid
 import os
 import base64
+import boto3
 from datetime import datetime
-from utils.http import respond
+from utils.http import respond, get_user_id
+from lib.logger import logger
 
 # Import table name resolution from data handler
 from .data import resolve_table_name
 
 def get_upload_url_endpoint(event, context):
     """POST /storage/upload-url - Get a presigned upload URL for direct binary upload"""
-    db = context['db']
     try:
-        body = json.loads(event.get('body', '{}'))
-    except:
-        return respond(400, {"error": "Invalid JSON"})
+        # Get user ID from the request
+        user_id = get_user_id(event)
+        if not user_id:
+            return respond(401, {"error": "Unauthorized"})
 
-    filename = body.get('filename') or f"{uuid.uuid4()}.jpg"
-    content_type = body.get('content_type', 'image/jpeg')
+        # Parse request body
+        try:
+            body = json.loads(event.get('body', '{}'))
+        except:
+            return respond(400, {"error": "Invalid JSON"})
 
-    try:
-        # Always use real Ibex/S3 - no mocking
-        res = db.get_upload_url(filename, content_type)
-        if not res.get('success'):
-            return respond(500, {"error": f"Failed to get upload URL: {res.get('error')}"}, event=event)
+        filename = body.get('filename') or f"{uuid.uuid4()}.jpg"
+        content_type = body.get('content_type', 'image/jpeg')
 
-        data = res.get('data', {})
+        # Generate unique S3 key
+        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        unique_id = str(uuid.uuid4())[:8]
+        key = f"uploads/{user_id}/{timestamp}_{unique_id}_{filename}"
+
+        # Configure S3 client
+        s3 = boto3.client('s3', region_name=os.environ.get('AWS_REGION', 'ap-south-1'))
+        bucket = os.environ.get('S3_BUCKET', 'nutriwealth-uploads')
+
+        # Generate presigned URL for PUT operation
+        url = s3.generate_presigned_url(
+            'put_object',
+            Params={
+                'Bucket': bucket,
+                'Key': key,
+                'ContentType': content_type
+            },
+            ExpiresIn=3600  # URL expires in 1 hour
+        )
+
+        logger.info(f"Generated upload URL for user {user_id}, key: {key}")
+
         return respond(200, {
             "success": True,
-            "upload_url": data.get('upload_url'),
-            "file_key": data.get('file_key'),
-            "instructions": "Send a PUT request to 'upload_url' with the binary file data."
-        }, event=event)
+            "upload_url": url,
+            "key": key,
+            "bucket": bucket,
+            "expires_in": 3600,
+            "instructions": "Send a PUT request to 'upload_url' with the binary file data and Content-Type header."
+        })
+
     except Exception as e:
-        return respond(500, {"error": str(e)}, event=event)
+        logger.error(f"Error generating upload URL: {e}")
+        return respond(500, {"error": str(e)})
 
 
 def upload_file(event, context):

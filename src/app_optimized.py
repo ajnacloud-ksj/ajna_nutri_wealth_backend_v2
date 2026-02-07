@@ -27,6 +27,13 @@ from lib.logger import logger
 from config.settings import settings
 import router
 
+# Force import of SQS handler to ensure it's included in Docker build
+try:
+    from handlers import sqs_handler
+    logger.info("SQS handler module imported successfully")
+except Exception as e:
+    logger.warning(f"Could not import SQS handler: {e}")
+
 
 # Load Schemas
 def load_schemas() -> Dict[str, Any]:
