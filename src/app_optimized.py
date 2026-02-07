@@ -29,10 +29,11 @@ import router
 
 # Force import of SQS handler to ensure it's included in Docker build
 try:
-    from handlers import sqs_handler
-    logger.info("SQS handler module imported successfully")
+    from src.handlers import sqs_handler
+    from src.handlers import analyze_async  # Pre-import to ensure it's in Docker
+    logger.info("SQS handler and async modules imported successfully")
 except Exception as e:
-    logger.warning(f"Could not import SQS handler: {e}")
+    logger.error(f"Failed to import SQS handlers: {e}", exc_info=True)
 
 
 # Load Schemas
@@ -80,8 +81,11 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if event.get('Records') and len(event.get('Records', [])) > 0:
             # Check if it's from SQS
             first_record = event['Records'][0]
-            if first_record.get('eventSource') == 'aws:sqs':
-                logger.info("Processing SQS messages")
+            event_source = first_record.get('eventSource')
+            logger.info(f"Received event with source: {event_source}")
+
+            if event_source == 'aws:sqs':
+                logger.info(f"Processing {len(event['Records'])} SQS messages")
 
                 # For SQS, we need to set up the database context
                 # Extract tenant info from the first message (all messages in batch should be from same tenant)
@@ -109,13 +113,13 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 context['db'] = tenant_db
                 context['tenant'] = tenant_config
 
-                from handlers import analyze_async
+                from src.handlers import analyze_async
                 return analyze_async.process_sqs_messages(event, context)
 
         # Check if this is a direct async processing request (legacy)
         if event.get('source') == 'async-processing':
             logger.info("Processing async Lambda Event invocation (legacy)")
-            from handlers import analyze_async
+            from src.handlers import analyze_async
             return analyze_async.process_async_request(event, context)
         
         # Get tenant configuration
