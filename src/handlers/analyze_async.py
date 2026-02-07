@@ -52,9 +52,16 @@ def submit_analysis(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             "entry_id": entry_id,
             "user_id": user_id,
             "description": description,
-            "image_url": image_url
+            "image_url": image_url,
+            # Add IBEX credentials to ensure async processor can access DB
+            "ibex_config": {
+                "api_url": os.environ.get('IBEX_API_URL', 'https://smartlink.ajna.cloud/ibexdb'),
+                "api_key": os.environ.get('IBEX_API_KEY'),
+                "tenant_id": context.get('tenant', {}).get('tenant_id', 'default'),
+                "namespace": context.get('tenant', {}).get('namespace', 'default')
+            }
         }
-        
+
         # Add tenant context if available
         tenant = context.get('tenant')
         if tenant:
@@ -180,23 +187,30 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
         # Note: We create new instances because context might not be fully populated in async event
         from src.config.settings import settings
         db_config = settings.config.database
-        
-        # Use tenant info from payload if available
-        final_tenant_id = payload.get('tenant_id') or db_config.tenant_id
-        final_namespace = payload.get('namespace') or db_config.namespace
-        
+
+        # Get IBEX config from payload (passed from submit_analysis)
+        ibex_config = payload.get('ibex_config', {})
+
+        # Use credentials from payload, fallback to environment/settings
+        api_url = ibex_config.get('api_url') or os.environ.get('IBEX_API_URL') or db_config.api_url
+        api_key = ibex_config.get('api_key') or os.environ.get('IBEX_API_KEY') or db_config.api_key
+        final_tenant_id = ibex_config.get('tenant_id') or payload.get('tenant_id') or db_config.tenant_id
+        final_namespace = ibex_config.get('namespace') or payload.get('namespace') or db_config.namespace
+
         db = IbexClient(
-            api_url=db_config.api_url,
-            api_key=db_config.api_key,
+            api_url=api_url,
+            api_key=api_key,
             tenant_id=final_tenant_id,
             namespace=final_namespace
         )
+
+        logger.info(f"Async processor using IBEX at {api_url} with tenant {final_tenant_id}")
         
         # Enable Direct Lambda invocation to avoid 403 errors
-        # lambda_name = os.environ.get('IBEX_LAMBDA_NAME') or os.environ.get('AWS_LAMBDA_FUNCTION_NAME')
-        # if hasattr(db, 'enable_direct_lambda') and lambda_name:
-        #    db.enable_direct_lambda(lambda_name)
-        #    logger.info(f"Direct Lambda invocation enabled for async processing: {lambda_name}")
+        lambda_name = os.environ.get('IBEX_LAMBDA_NAME') or 'ibex-db-lambda'
+        if hasattr(db, 'enable_direct_lambda') and lambda_name:
+            db.enable_direct_lambda(lambda_name)
+            logger.info(f"Direct Lambda invocation enabled for async processing: {lambda_name}")
         ai_service = OptimizedAIService(db)
 
         # Process with AI
