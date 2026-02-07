@@ -45,21 +45,21 @@ class LocalAuthProvider(AuthProvider):
                 "email": "developer@local.test",
                 "name": "Local Developer",
                 "role": "admin",
-                "tenant_id": "test-tenant"
+                "tenant_id": "nutriwealth"
             },
             "test-user-1": {
                 "id": "test-user-1",
                 "email": "testuser@local.test",
                 "name": "Test User",
                 "role": "participant",
-                "tenant_id": "test-tenant"
+                "tenant_id": "nutriwealth"
             },
             "caretaker-1": {
                 "id": "caretaker-1",
                 "email": "caretaker@local.test",
                 "name": "Test Caretaker",
                 "role": "caretaker",
-                "tenant_id": "test-tenant"
+                "tenant_id": "nutriwealth"
             }
         }
         self.default_user_id = "dev-user-1"
@@ -214,7 +214,7 @@ class TestAuthProvider(AuthProvider):
             "email": "test@test.com",
             "name": "Test User",
             "role": "admin",
-            "tenant_id": "test"
+            "tenant_id": "nutriwealth"
         }
 
     def verify_token(self, token: str) -> Optional[Dict[str, Any]]:

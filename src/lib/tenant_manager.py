@@ -19,7 +19,7 @@ class TenantManager:
     # Load tenant configuration from file
     _config_loaded = False
     _tenant_config = {}
-    _default_tenant = "test"
+    _default_tenant = "nutriwealth"
     _feature_definitions = {}
 
     @classmethod
@@ -37,7 +37,7 @@ class TenantManager:
             with open(config_path, 'r') as f:
                 config = json.load(f)
                 cls._tenant_config = config.get('tenants', {})
-                cls._default_tenant = config.get('default_tenant', 'test')
+                cls._default_tenant = config.get('default_tenant', 'nutriwealth')
                 cls._feature_definitions = config.get('feature_definitions', {})
                 cls._config_loaded = True
                 print(f"Loaded {len(cls._tenant_config)} tenant configurations")
@@ -45,7 +45,7 @@ class TenantManager:
             print(f"Warning: tenants.json not found at {config_path}, using defaults")
             cls._tenant_config = {
                 "test": {
-                    "tenant_id": "test-tenant",
+                    "tenant_id": "nutriwealth",
                     "namespace": "default",
                     "display_name": "Test Environment",
                     "features": ["all"]
@@ -56,7 +56,7 @@ class TenantManager:
             print(f"Error loading tenant config: {e}")
             cls._tenant_config = {
                 "test": {
-                    "tenant_id": "test-tenant",
+                    "tenant_id": "nutriwealth",
                     "namespace": "default",
                     "display_name": "Test Environment",
                     "features": ["all"]
@@ -107,7 +107,7 @@ class TenantManager:
                     return config
 
         # 4. Default to configured default tenant
-        return cls._tenant_config.get(cls._default_tenant, cls._tenant_config.get('test'))
+        return cls._tenant_config.get(cls._default_tenant, cls._tenant_config.get('nutriwealth'))
 
     @classmethod
     def has_feature(cls, tenant_config: Dict[str, Any], feature: str) -> bool:
