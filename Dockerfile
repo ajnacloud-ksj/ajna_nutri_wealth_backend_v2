@@ -10,11 +10,17 @@ COPY src/requirements.txt ${LAMBDA_TASK_ROOT}
 # Install dependencies using uv (faster than pip)
 RUN uv pip install --system -r ${LAMBDA_TASK_ROOT}/requirements.txt
 
-# Copy function code
+# Copy ALL source code - ensure nothing is missing
 COPY src/ ${LAMBDA_TASK_ROOT}/src/
+
+# Copy app.py to root for Lambda entry point
 COPY src/app.py ${LAMBDA_TASK_ROOT}/app.py
+
+# Ensure schemas are available
 COPY src/schemas ${LAMBDA_TASK_ROOT}/schemas
-COPY local_server.py ${LAMBDA_TASK_ROOT}/
+
+# Force Python to compile all modules to catch import errors at build time
+RUN python -m compileall ${LAMBDA_TASK_ROOT}/src/
 
 # Add src to PYTHONPATH so relative imports work
 ENV PYTHONPATH="${LAMBDA_TASK_ROOT}/src:${PYTHONPATH}"

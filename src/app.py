@@ -91,10 +91,53 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     request_id = getattr(context, 'aws_request_id', None) or event.get('requestContext', {}).get('requestId')
 
     try:
-        # Check if this is an async processing request (not an HTTP request)
+        # CRITICAL: Check if this is an SQS event FIRST
+        if event.get('Records') and len(event.get('Records', [])) > 0:
+            first_record = event['Records'][0]
+            event_source = first_record.get('eventSource')
+
+            if event_source == 'aws:sqs':
+                logger.info(f"Processing {len(event['Records'])} SQS messages")
+
+                # Extract tenant info from the first message
+                try:
+                    import json
+                    message_body = json.loads(first_record.get('body', '{}'))
+                    tenant_config = {
+                        'tenant_id': message_body.get('tenant_id', TENANT_ID),
+                        'namespace': message_body.get('namespace', NAMESPACE),
+                        'display_name': 'SQS Processing'
+                    }
+                except Exception as e:
+                    logger.warning(f"Could not extract tenant from SQS message: {e}")
+                    tenant_config = {
+                        'tenant_id': TENANT_ID,
+                        'namespace': NAMESPACE,
+                        'display_name': 'Default'
+                    }
+
+                # Create database client for SQS processing
+                tenant_db = TenantManager.create_ibex_client(tenant_config, client_class=IbexClient)
+
+                # Enable Direct Lambda if configured
+                if IBEX_LAMBDA_NAME:
+                    tenant_db.enable_direct_lambda(function_name=IBEX_LAMBDA_NAME, use_for_writes_only=False)
+
+                # Build context for SQS handler
+                handler_context = {
+                    "db": tenant_db,
+                    "tenant": tenant_config,
+                    "request_id": request_id
+                }
+
+                # Process SQS messages
+                from src.handlers import analyze_async
+                return analyze_async.process_sqs_messages(event, handler_context)
+
+        # Check if this is an async processing request (legacy Lambda invoke)
         if event.get('source') == 'async-processing':
-            logger.info("Processing async Lambda invocation")
-            from handlers import analyze_async
+            logger.info("Processing async Lambda invocation (legacy)")
+            from src.handlers import analyze_async
             return analyze_async.process_async_request(event, context)
         
         # Get tenant configuration from request
