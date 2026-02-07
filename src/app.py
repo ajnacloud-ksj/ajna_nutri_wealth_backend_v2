@@ -192,3 +192,4 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             "error": "Internal server error",
             "request_id": request_id
         }, event=event)
+# Force Docker rebuild by changing timestamp
