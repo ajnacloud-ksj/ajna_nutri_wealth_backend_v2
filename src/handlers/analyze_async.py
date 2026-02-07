@@ -297,54 +297,59 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
                 existing_record = check_result['data']['records'][0]
                 logger.info(f"Found pending record to update: {existing_record}")
 
-                # Try UPDATE with ALL fields (IBEX might require complete record)
-                # Copy all existing fields and update only what needs changing
-                updated_record = existing_record.copy()
-                updated_record["status"] = "completed"
-                updated_record["category"] = category
-                updated_record["completed_at"] = datetime.utcnow().isoformat()
-                updated_record["updated_at"] = datetime.utcnow().isoformat()
+                # WORKAROUND: IBEX UPDATE has a critical bug where it returns success but doesn't persist changes
+                # Use DELETE + WRITE instead of UPDATE
+                logger.info("Using DELETE + WRITE workaround due to IBEX UPDATE bug")
 
-                # Remove internal fields that shouldn't be in updates
-                for key in list(updated_record.keys()):
-                    if key.startswith('_'):
-                        del updated_record[key]
-
-                # Remove id and user_id from updates (they're in filters)
-                updated_record.pop('id', None)
-                updated_record.pop('user_id', None)
-
-                update_result = db.update("app_pending_analyses",
+                # First, delete the old record
+                delete_result = db.delete("app_pending_analyses",
                                         filters=[
-                                            {"field": "id", "operator": "eq", "value": entry_id},
-                                            {"field": "user_id", "operator": "eq", "value": user_id}
-                                        ],
-                                        updates=updated_record)
+                                            {"field": "id", "operator": "eq", "value": entry_id}
+                                        ])
 
-                if update_result.get('success'):
-                    logger.info(f"Status updated to completed for entry {entry_id}")
-                else:
-                    logger.error(f"UPDATE with all fields failed for {entry_id}: {update_result.get('error')}")
-                    logger.error(f"Update result: {json.dumps(update_result)}")
+                if delete_result.get('success'):
+                    logger.info(f"Deleted old pending record for {entry_id}")
 
-                    # Fallback: Try UPDATE with only ID filter (simpler)
-                    logger.info("Attempting fallback: UPDATE with single filter")
+                    # Now write the updated record
+                    new_record = {
+                        "id": entry_id,
+                        "user_id": user_id,
+                        "status": "completed",
+                        "category": category,
+                        "description": existing_record.get('description'),
+                        "image_url": existing_record.get('image_url'),
+                        "analysis_result": existing_record.get('analysis_result'),
+                        "completed_at": datetime.utcnow().isoformat(),
+                        "created_at": existing_record.get('created_at', datetime.utcnow().isoformat()),
+                        "updated_at": datetime.utcnow().isoformat()
+                    }
 
-                    simple_update_result = db.update("app_pending_analyses",
-                                                    filters=[
-                                                        {"field": "id", "operator": "eq", "value": entry_id}
-                                                    ],
-                                                    updates={
-                                                        "status": "completed",
-                                                        "category": category,
-                                                        "completed_at": datetime.utcnow().isoformat(),
-                                                        "updated_at": datetime.utcnow().isoformat()
-                                                    })
+                    write_result = db.write("app_pending_analyses", [new_record])
 
-                    if simple_update_result.get('success'):
-                        logger.info(f"Fallback UPDATE with single filter succeeded for {entry_id}")
+                    if write_result.get('success'):
+                        logger.info(f"Status updated to completed for entry {entry_id} using DELETE+WRITE workaround")
                     else:
-                        logger.error(f"Fallback UPDATE also failed: {simple_update_result.get('error')}")
+                        logger.error(f"Failed to write updated record for {entry_id}: {write_result.get('error')}")
+                else:
+                    logger.error(f"Failed to delete old record for {entry_id}: {delete_result.get('error')}")
+
+                    # Try direct UPDATE anyway (might work in some cases)
+                    logger.info("DELETE failed, trying direct UPDATE as last resort")
+                    update_result = db.update("app_pending_analyses",
+                                            filters=[
+                                                {"field": "id", "operator": "eq", "value": entry_id}
+                                            ],
+                                            updates={
+                                                "status": "completed",
+                                                "category": category,
+                                                "completed_at": datetime.utcnow().isoformat(),
+                                                "updated_at": datetime.utcnow().isoformat()
+                                            })
+
+                    if update_result.get('success'):
+                        logger.info(f"Direct UPDATE succeeded for {entry_id}")
+                    else:
+                        logger.error(f"All update attempts failed for {entry_id}")
 
                         # Last resort: Log critical error for investigation
                         logger.critical(f"CRITICAL: Cannot update status for {entry_id}")
