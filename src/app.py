@@ -194,3 +194,4 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         }, event=event)
 # Force Docker rebuild by changing timestamp
 # Build timestamp: Fri Feb  6 21:31:11 EST 2026
+# Docker fix for Lambda: Fri Feb  6 21:38:07 EST 2026
