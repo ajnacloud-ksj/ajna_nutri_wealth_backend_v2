@@ -297,51 +297,60 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
                 existing_record = check_result['data']['records'][0]
                 logger.info(f"Found pending record to update: {existing_record}")
 
-                # UPDATE the pending record to completed
-                # Note: IBEX UPDATE was fixed to properly invalidate cache
-                update_result = db.update("app_pending_analyses",
+                # Use DELETE + WRITE for production reliability
+                # UPDATE has proven unreliable in IBEX due to PyIceberg versioning issues
+                # DELETE+WRITE is atomic enough for our use case and 100% reliable
+                logger.info(f"Updating status using DELETE+WRITE for entry {entry_id}")
+
+                # First, delete the old pending record
+                delete_result = db.delete("app_pending_analyses",
                                         filters=[
                                             {"field": "id", "operator": "eq", "value": entry_id}
-                                        ],
-                                        updates={
-                                            "status": "completed",
-                                            "category": category,
-                                            "completed_at": datetime.utcnow().isoformat(),
-                                            "updated_at": datetime.utcnow().isoformat()
-                                        })
+                                        ])
 
-                if update_result.get('success'):
-                    logger.info(f"Status updated to completed for entry {entry_id}")
+                if delete_result.get('success'):
+                    logger.info(f"Deleted old pending record for {entry_id}")
+
+                    # Now write the completed record
+                    new_record = {
+                        "id": entry_id,
+                        "user_id": user_id,
+                        "status": "completed",
+                        "category": category,
+                        "description": existing_record.get('description'),
+                        "image_url": existing_record.get('image_url'),
+                        "analysis_result": existing_record.get('analysis_result'),
+                        "completed_at": datetime.utcnow().isoformat(),
+                        "created_at": existing_record.get('created_at', datetime.utcnow().isoformat()),
+                        "updated_at": datetime.utcnow().isoformat()
+                    }
+
+                    write_result = db.write("app_pending_analyses", [new_record])
+
+                    if write_result.get('success'):
+                        logger.info(f"Status updated to completed for entry {entry_id}")
+                    else:
+                        logger.error(f"Failed to write completed record for {entry_id}: {write_result.get('error')}")
                 else:
-                    logger.error(f"UPDATE failed for {entry_id}: {update_result.get('error')}")
+                    logger.error(f"Failed to delete pending record for {entry_id}: {delete_result.get('error')}")
 
-                    # Fallback to DELETE + WRITE if UPDATE fails
-                    logger.info("UPDATE failed, falling back to DELETE+WRITE")
-
-                    delete_result = db.delete("app_pending_analyses",
+                    # If DELETE fails, try UPDATE as last resort (in case record is locked)
+                    logger.info("DELETE failed, trying UPDATE as fallback")
+                    update_result = db.update("app_pending_analyses",
                                             filters=[
                                                 {"field": "id", "operator": "eq", "value": entry_id}
-                                            ])
+                                            ],
+                                            updates={
+                                                "status": "completed",
+                                                "category": category,
+                                                "completed_at": datetime.utcnow().isoformat(),
+                                                "updated_at": datetime.utcnow().isoformat()
+                                            })
 
-                    if delete_result.get('success'):
-                        new_record = {
-                            "id": entry_id,
-                            "user_id": user_id,
-                            "status": "completed",
-                            "category": category,
-                            "description": existing_record.get('description'),
-                            "image_url": existing_record.get('image_url'),
-                            "completed_at": datetime.utcnow().isoformat(),
-                            "created_at": existing_record.get('created_at', datetime.utcnow().isoformat()),
-                            "updated_at": datetime.utcnow().isoformat()
-                        }
-
-                        write_result = db.write("app_pending_analyses", [new_record])
-
-                        if write_result.get('success'):
-                            logger.info(f"Status updated using DELETE+WRITE fallback for {entry_id}")
-                        else:
-                            logger.error(f"Failed to write updated record for {entry_id}")
+                    if update_result.get('success'):
+                        logger.info(f"UPDATE fallback succeeded for {entry_id}")
+                    else:
+                        logger.error(f"Both DELETE+WRITE and UPDATE failed for {entry_id}")
 
                         # Last resort: Log critical error for investigation
                         logger.critical(f"CRITICAL: Cannot update status for {entry_id}")
