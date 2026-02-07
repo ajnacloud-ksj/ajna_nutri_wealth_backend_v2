@@ -62,8 +62,8 @@ def submit_analysis(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             "ibex_config": {
                 "api_url": os.environ.get('IBEX_API_URL', 'https://smartlink.ajna.cloud/ibexdb'),
                 "api_key": os.environ.get('IBEX_API_KEY'),
-                "tenant_id": context.get('tenant', {}).get('tenant_id', 'default'),
-                "namespace": context.get('tenant', {}).get('namespace', 'default')
+                "tenant_id": context.get('tenant', {}).get('tenant_id') or os.environ.get('TENANT_ID', 'nutriwealth'),
+                "namespace": context.get('tenant', {}).get('namespace') or os.environ.get('NAMESPACE', 'default')
             }
         }
 
@@ -123,8 +123,7 @@ def get_analysis_status(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                              {"field": "id", "operator": "eq", "value": entry_id},
                              {"field": "user_id", "operator": "eq", "value": user_id}
                          ],
-                         limit=1,
-                         use_cache=False)
+                         limit=1)
         logger.info(f"Query result success: {result.get('success')}, records: {len(result.get('data', {}).get('records', []))}")
         
         if result.get('success') and result.get('data', {}).get('records'):
@@ -275,24 +274,40 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
             
             # Update pending_analyses status
             logger.info(f"Updating status for entry_id={entry_id}, user_id={user_id}")
+            logger.info(f"Using tenant={final_tenant_id}, namespace={final_namespace}")
 
-            # UPDATE with both id and user_id filters for safety
-            update_result = db.update("app_pending_analyses",
-                                    filters=[
-                                        {"field": "id", "operator": "eq", "value": entry_id},
-                                        {"field": "user_id", "operator": "eq", "value": user_id}
-                                    ],
-                                    updates={
-                                        "status": "completed",
-                                        "category": category,
-                                        "completed_at": datetime.utcnow().isoformat(),
-                                        "updated_at": datetime.utcnow().isoformat()
-                                    })
+            # First, verify the record exists before updating
+            check_result = db.query("app_pending_analyses",
+                                   filters=[
+                                       {"field": "id", "operator": "eq", "value": entry_id},
+                                       {"field": "user_id", "operator": "eq", "value": user_id}
+                                   ],
+                                   limit=1)
 
-            if update_result.get('success'):
-                logger.info(f"Status updated to completed for entry {entry_id}")
+            if check_result.get('success') and check_result.get('data', {}).get('records'):
+                logger.info(f"Found pending record to update: {check_result['data']['records'][0]}")
+
+                # UPDATE with both id and user_id filters for safety
+                update_result = db.update("app_pending_analyses",
+                                        filters=[
+                                            {"field": "id", "operator": "eq", "value": entry_id},
+                                            {"field": "user_id", "operator": "eq", "value": user_id}
+                                        ],
+                                        updates={
+                                            "status": "completed",
+                                            "category": category,
+                                            "completed_at": datetime.utcnow().isoformat(),
+                                            "updated_at": datetime.utcnow().isoformat()
+                                        })
+
+                if update_result.get('success'):
+                    logger.info(f"Status updated to completed for entry {entry_id}")
+                else:
+                    logger.error(f"Failed to update status for {entry_id}: {update_result.get('error')}")
+                    logger.error(f"Update result: {json.dumps(update_result)}")
             else:
-                logger.error(f"Failed to update status for {entry_id}: {update_result.get('error')}")
+                logger.error(f"Could not find pending record for entry_id={entry_id}, user_id={user_id}")
+                logger.error(f"Query result: {json.dumps(check_result)}")
             
             logger.info("Async analysis completed successfully", extra={'entry_id': entry_id})
         else:
