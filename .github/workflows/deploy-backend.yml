@@ -87,22 +87,45 @@ jobs:
       - name: Verify SQS trigger configuration
         run: |
           echo "Verifying SQS trigger configuration..."
-          aws lambda list-event-source-mappings \
-            --function-name ajna_nutri_wealth_backend_v2 \
-            --region ap-south-1 \
-            --query "EventSourceMappings[?contains(EventSourceArn,'nutriwealth-analysis-queue')].{State:State,BatchSize:BatchSize,EventSourceArn:EventSourceArn}" \
-            --output table
 
-          # Check if the trigger is enabled
-          STATE=$(aws lambda list-event-source-mappings \
-            --function-name ajna_nutri_wealth_backend_v2 \
-            --region ap-south-1 \
-            --query "EventSourceMappings[?contains(EventSourceArn,'nutriwealth-analysis-queue')].State" \
-            --output text)
+          # Wait for trigger to be enabled (handles "Updating" state)
+          MAX_ATTEMPTS=30  # 30 attempts * 2 seconds = 60 seconds max
+          ATTEMPT=0
 
-          if [ "$STATE" = "Enabled" ]; then
-            echo "✅ SQS trigger is enabled and ready for async processing!"
-          else
-            echo "⚠️ Warning: SQS trigger state is $STATE"
-            exit 1
-          fi
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            # Get current state
+            STATE=$(aws lambda list-event-source-mappings \
+              --function-name ajna_nutri_wealth_backend_v2 \
+              --region ap-south-1 \
+              --query "EventSourceMappings[?contains(EventSourceArn,'nutriwealth-analysis-queue')].State" \
+              --output text)
+
+            echo "Attempt $((ATTEMPT + 1))/$MAX_ATTEMPTS: Trigger state is '$STATE'"
+
+            if [ "$STATE" = "Enabled" ]; then
+              echo "✅ SQS trigger is enabled and ready for async processing!"
+
+              # Show final configuration
+              aws lambda list-event-source-mappings \
+                --function-name ajna_nutri_wealth_backend_v2 \
+                --region ap-south-1 \
+                --query "EventSourceMappings[?contains(EventSourceArn,'nutriwealth-analysis-queue')].{State:State,BatchSize:BatchSize,EventSourceArn:EventSourceArn}" \
+                --output table
+
+              exit 0
+            elif [ "$STATE" = "Enabling" ] || [ "$STATE" = "Updating" ]; then
+              echo "⏳ Trigger is in transitional state, waiting..."
+              sleep 2
+            elif [ -z "$STATE" ]; then
+              echo "❌ ERROR: No SQS trigger found!"
+              exit 1
+            else
+              echo "❌ ERROR: Unexpected trigger state: $STATE"
+              exit 1
+            fi
+
+            ATTEMPT=$((ATTEMPT + 1))
+          done
+
+          echo "❌ ERROR: Timeout waiting for SQS trigger to be enabled (stuck in state: $STATE)"
+          exit 1
