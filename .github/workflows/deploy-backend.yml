@@ -31,3 +31,78 @@ jobs:
       # Pass environment variables (Secrets are automatically injected by reusable workflow)
       environment-variables: "AUTH_MODE=cognito,ENABLE_LAMBDA_ASYNC=false,ENABLE_SQS=true,ANALYSIS_QUEUE_URL=${{ vars.ANALYSIS_QUEUE_URL }},ANALYSIS_DLQ_URL=${{ vars.ANALYSIS_DLQ_URL }},IBEX_LAMBDA_NAME=${{ vars.IBEX_LAMBDA_NAME }},IBEX_API_URL=${{ vars.IBEX_API_URL }},COGNITO_REGION=ap-south-1,COGNITO_USER_POOL_ID=${{ vars.COGNITO_USER_POOL_ID }},COGNITO_CLIENT_ID=${{ vars.COGNITO_CLIENT_ID }}"
     secrets: inherit
+
+  configure-sqs-trigger:
+    name: Configure SQS Trigger for Async Processing
+    needs: deploy-lambda
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::808527335982:role/GitHubActions-Deploy-Role
+          aws-region: ap-south-1
+
+      - name: Check for existing SQS trigger
+        id: check-trigger
+        run: |
+          echo "Checking for existing SQS event source mapping..."
+          EXISTING_UUID=$(aws lambda list-event-source-mappings \
+            --function-name ajna_nutri_wealth_backend_v2 \
+            --region ap-south-1 \
+            --query "EventSourceMappings[?contains(EventSourceArn,'nutriwealth-analysis-queue')].UUID" \
+            --output text || echo "")
+
+          echo "existing_uuid=$EXISTING_UUID" >> $GITHUB_OUTPUT
+
+          if [ -n "$EXISTING_UUID" ]; then
+            echo "Found existing mapping: $EXISTING_UUID"
+          else
+            echo "No existing mapping found"
+          fi
+
+      - name: Create or update SQS trigger
+        run: |
+          if [ -n "${{ steps.check-trigger.outputs.existing_uuid }}" ]; then
+            echo "Updating existing SQS trigger..."
+            aws lambda update-event-source-mapping \
+              --uuid "${{ steps.check-trigger.outputs.existing_uuid }}" \
+              --enabled \
+              --batch-size 10 \
+              --maximum-batching-window-in-seconds 0 \
+              --region ap-south-1
+            echo "✅ Updated existing SQS trigger"
+          else
+            echo "Creating new SQS trigger..."
+            aws lambda create-event-source-mapping \
+              --function-name ajna_nutri_wealth_backend_v2 \
+              --event-source-arn arn:aws:sqs:ap-south-1:808527335982:nutriwealth-analysis-queue \
+              --batch-size 10 \
+              --maximum-batching-window-in-seconds 0 \
+              --region ap-south-1
+            echo "✅ Created new SQS trigger"
+          fi
+
+      - name: Verify SQS trigger configuration
+        run: |
+          echo "Verifying SQS trigger configuration..."
+          aws lambda list-event-source-mappings \
+            --function-name ajna_nutri_wealth_backend_v2 \
+            --region ap-south-1 \
+            --query "EventSourceMappings[?contains(EventSourceArn,'nutriwealth-analysis-queue')].{State:State,BatchSize:BatchSize,EventSourceArn:EventSourceArn}" \
+            --output table
+
+          # Check if the trigger is enabled
+          STATE=$(aws lambda list-event-source-mappings \
+            --function-name ajna_nutri_wealth_backend_v2 \
+            --region ap-south-1 \
+            --query "EventSourceMappings[?contains(EventSourceArn,'nutriwealth-analysis-queue')].State" \
+            --output text)
+
+          if [ "$STATE" = "Enabled" ]; then
+            echo "✅ SQS trigger is enabled and ready for async processing!"
+          else
+            echo "⚠️ Warning: SQS trigger state is $STATE"
+            exit 1
+          fi
