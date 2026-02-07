@@ -13,6 +13,8 @@ from src.handlers import analyze  # Using improved analyze handler
 from src.handlers import analyze_async  # Async analysis with SQS
 from src.handlers import model_config  # Model configuration management
 from src.handlers import health  # Health check endpoints
+from src.handlers import database_admin  # Database setup and cleanup
+from src.handlers import user  # User profile management
 
 # Note: Using improved analyze handler with two-stage AI processing
 
@@ -28,6 +30,12 @@ ROUTES = [
     ('POST', r'^/v1/system/create-database$', data.create_database),
     ('POST', r'^/v1/system/initialize-schemas$', data.initialize_schemas),
     ('POST', r'^/v1/system/reset-database$', data.reset_database),
+
+    # Database Admin (for setup and cleanup)
+    ('POST', r'^/v1/admin/database/setup$', database_admin.setup_database),
+    ('DELETE', r'^/v1/admin/database/cleanup$', database_admin.cleanup_database),
+    ('POST', r'^/v1/admin/database/reset$', database_admin.reset_database),
+    ('GET', r'^/v1/admin/database/health$', database_admin.database_health_check),
 
     # Auth
     ('GET', r'^/v1/auth/config$', auth.get_config),
@@ -56,6 +64,10 @@ ROUTES = [
     ('POST', r'^/storage/upload$', storage.upload_file),
     ('POST', r'^/v1/storage/upload-url$', storage.get_upload_url_endpoint), # New: Get Presigned URL
     ('GET', r'^/v1/storage/(?P<path>.+)$', storage.get_file),
+
+    # User Profile (before generic data routes)
+    ('GET', r'^/v1/user/profile$', user.get_current_user),
+    ('GET', r'^/v1/user/(?P<id>[a-zA-Z0-9-]+)$', user.get_user_by_id),
 
     # Generic Data (Last to avoid collisions)
     ('GET', r'^/v1/(?P<table>[a-zA-Z0-9_]+)$', data.list_data),
