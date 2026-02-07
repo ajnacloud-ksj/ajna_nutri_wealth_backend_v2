@@ -13,6 +13,7 @@ from collections import OrderedDict
 import threading
 import boto3
 from datetime import datetime, timedelta
+from src.lib.logger import logger
 
 # Global cache that persists between Lambda invocations
 # This stays in memory for ~15 minutes in Lambda containers
@@ -392,6 +393,8 @@ class OptimizedIbexClient:
         # Invalidate cache
         if result.get("success"):
             self._invalidate_cache_pattern(f"table:{table}")
+        else:
+            logger.error(f"UPDATE failed for table {table}: {result.get('error')}")
 
         return result
 

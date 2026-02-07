@@ -274,34 +274,40 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
                 _store_receipt_result(db, user_id, entry_id, data, image_url)
             
             # Update pending_analyses status
-            # First, let's log what we're trying to update
-            logger.info(f"Attempting to update status for entry_id={entry_id}, user_id={user_id}")
+            logger.info(f"Updating status for entry_id={entry_id}, user_id={user_id}")
 
-            # Try update with just ID first (IBEX might not support multi-filter UPDATE)
+            # UPDATE with both id and user_id filters for safety
             update_result = db.update("app_pending_analyses",
-                     filters=[
-                         {"field": "id", "operator": "eq", "value": entry_id}
-                     ],
-                     updates={
-                         "status": "completed",
-                         "category": category,
-                         "completed_at": datetime.utcnow().isoformat()
-                     })
+                                    filters=[
+                                        {"field": "id", "operator": "eq", "value": entry_id},
+                                        {"field": "user_id", "operator": "eq", "value": user_id}
+                                    ],
+                                    updates={
+                                        "status": "completed",
+                                        "category": category,
+                                        "completed_at": datetime.utcnow().isoformat(),
+                                        "updated_at": datetime.utcnow().isoformat()
+                                    })
 
-            logger.info(f"Update result: {update_result.get('success')}, error: {update_result.get('error')}")
+            if update_result.get('success'):
+                logger.info(f"Status updated to completed for entry {entry_id}")
+            else:
+                logger.error(f"Failed to update status for {entry_id}: {update_result.get('error')}")
             
             logger.info("Async analysis completed successfully", extra={'entry_id': entry_id})
         else:
             error_msg = result.get('error', 'Unknown error')
-            # Use single filter for UPDATE (IBEX limitation)
+            # Update status to failed
             db.update("app_pending_analyses",
                      filters=[
-                         {"field": "id", "operator": "eq", "value": entry_id}
+                         {"field": "id", "operator": "eq", "value": entry_id},
+                         {"field": "user_id", "operator": "eq", "value": user_id}
                      ],
                      updates={
                          "status": "failed",
                          "error": error_msg,
-                         "failed_at": datetime.utcnow().isoformat()
+                         "failed_at": datetime.utcnow().isoformat(),
+                         "updated_at": datetime.utcnow().isoformat()
                      })
             logger.error("Async analysis failed", extra={'entry_id': entry_id, 'error': error_msg})
 
