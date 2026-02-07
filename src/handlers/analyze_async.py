@@ -38,6 +38,13 @@ def submit_analysis(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         # 1. Create pending record
         db = context.get('db')
+
+        # Log tenant info for debugging
+        tenant_info = context.get('tenant', {})
+        current_tenant_id = tenant_info.get('tenant_id', 'nutriwealth')
+        current_namespace = tenant_info.get('namespace', 'default')
+        logger.info(f"Creating pending record with tenant_id={current_tenant_id}, namespace={current_namespace}")
+
         db.write("app_pending_analyses", [{
             "id": entry_id,
             "user_id": user_id,
@@ -59,11 +66,12 @@ def submit_analysis(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             "description": description,
             "image_url": image_url,
             # Add IBEX credentials to ensure async processor can access DB
+            # CRITICAL: Must use EXACT same tenant_id as the db.write above!
             "ibex_config": {
                 "api_url": os.environ.get('IBEX_API_URL', 'https://smartlink.ajna.cloud/ibexdb'),
                 "api_key": os.environ.get('IBEX_API_KEY'),
-                "tenant_id": context.get('tenant', {}).get('tenant_id') or os.environ.get('TENANT_ID', 'nutriwealth'),
-                "namespace": context.get('tenant', {}).get('namespace') or os.environ.get('NAMESPACE', 'default')
+                "tenant_id": current_tenant_id,  # Use same tenant_id as the WRITE
+                "namespace": current_namespace     # Use same namespace as the WRITE
             }
         }
 
@@ -246,7 +254,8 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
             namespace=final_namespace
         )
 
-        logger.info(f"Async processor using IBEX at {api_url} with tenant {final_tenant_id}")
+        logger.info(f"Async processor using IBEX at {api_url} with tenant={final_tenant_id}, namespace={final_namespace}")
+        logger.info(f"Processing entry_id={entry_id} for user_id={user_id}")
         
         # Enable Direct Lambda invocation to avoid 403 errors
         lambda_name = os.environ.get('IBEX_LAMBDA_NAME') or 'ibex-db-lambda'
