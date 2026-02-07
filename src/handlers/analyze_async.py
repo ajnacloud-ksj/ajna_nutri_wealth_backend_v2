@@ -46,9 +46,14 @@ def submit_analysis(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             "updated_at": datetime.utcnow().isoformat()
         }])
         
-        # 2. Invoke Lambda asynchronously
-        payload = {
-            "source": "async-processing",
+        # 2. Send to SQS queue (instead of Lambda.invoke)
+        sqs = boto3.client('sqs')
+        # Use full URL for SQS (not just queue name)
+        queue_url = os.environ.get('ANALYSIS_QUEUE_URL',
+                                   'https://sqs.ap-south-1.amazonaws.com/808527335982/nutriwealth-analysis-queue')
+
+        message = {
+            "source": "sqs-processing",
             "entry_id": entry_id,
             "user_id": user_id,
             "description": description,
@@ -65,23 +70,26 @@ def submit_analysis(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Add tenant context if available
         tenant = context.get('tenant')
         if tenant:
-             payload['tenant_id'] = tenant.get('tenant_id')
-             payload['namespace'] = tenant.get('namespace')
-        
-        lambda_client = boto3.client('lambda')
-        # Use current function name or from env
-        function_name = os.environ.get('AWS_LAMBDA_FUNCTION_NAME')
-        
-        lambda_client.invoke(
-            FunctionName=function_name,
-            InvocationType='Event', # Async
-            Payload=json.dumps(payload)
+            message['tenant_id'] = tenant.get('tenant_id')
+            message['namespace'] = tenant.get('namespace')
+
+        # Send message to SQS
+        sqs_response = sqs.send_message(
+            QueueUrl=queue_url,
+            MessageBody=json.dumps(message),
+            MessageAttributes={
+                'user_id': {'StringValue': user_id, 'DataType': 'String'},
+                'entry_id': {'StringValue': entry_id, 'DataType': 'String'}
+            }
         )
-        
+
+        logger.info(f"Message sent to SQS: {sqs_response['MessageId']} for entry {entry_id}")
+
         return respond(202, {
             "entry_id": entry_id,
             "status": "pending",
-            "message": "Analysis started"
+            "message": "Analysis queued",
+            "sqs_message_id": sqs_response['MessageId']
         })
 
     except Exception as e:
@@ -163,13 +171,49 @@ def get_analysis_status(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         return respond(500, {"error": str(e)})
 
 
-def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+def process_sqs_messages(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    Handle async processing via Lambda Event invocation
-    Payload comes directly in event body (already parsed by Lambda if invocation type is Event)
+    Process messages from SQS queue
+    This is triggered by SQS event source mapping
     """
     try:
-        # For Event invocation, the event IS the payload
+        # SQS sends batch of messages in Records
+        for record in event.get('Records', []):
+            # Each record contains the message body
+            message_body = record.get('body')
+            if not message_body:
+                logger.error("Empty SQS message")
+                continue
+
+            # Parse the message
+            try:
+                payload = json.loads(message_body)
+            except json.JSONDecodeError as e:
+                logger.error(f"Invalid JSON in SQS message: {e}")
+                continue
+
+            # Process the message
+            result = process_async_request(payload, context)
+
+            # If processing fails, raise exception to trigger retry
+            if not result or result.get('statusCode') != 200:
+                raise Exception(f"Processing failed for entry {payload.get('entry_id')}")
+
+        return {"statusCode": 200, "body": json.dumps({"success": True})}
+
+    except Exception as e:
+        logger.error(f"Error processing SQS messages: {e}")
+        # Raise to trigger SQS retry
+        raise
+
+
+def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """
+    Handle async processing (from SQS or direct invocation)
+    Processes the analysis request asynchronously
+    """
+    try:
+        # The event is now the parsed message payload
         payload = event
         
         user_id = payload.get('user_id')

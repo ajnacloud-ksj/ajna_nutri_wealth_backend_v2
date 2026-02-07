@@ -69,9 +69,18 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     Routes requests to appropriate handlers
     """
     try:
-        # Check if this is an async processing request
+        # Check if this is an SQS event
+        if event.get('Records') and len(event.get('Records', [])) > 0:
+            # Check if it's from SQS
+            first_record = event['Records'][0]
+            if first_record.get('eventSource') == 'aws:sqs':
+                logger.info("Processing SQS messages")
+                from handlers import analyze_async
+                return analyze_async.process_sqs_messages(event, context)
+
+        # Check if this is a direct async processing request (legacy)
         if event.get('source') == 'async-processing':
-            logger.info("Processing async Lambda Event invocation")
+            logger.info("Processing async Lambda Event invocation (legacy)")
             from handlers import analyze_async
             return analyze_async.process_async_request(event, context)
         
