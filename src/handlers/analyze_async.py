@@ -285,9 +285,10 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
                                    limit=1)
 
             if check_result.get('success') and check_result.get('data', {}).get('records'):
-                logger.info(f"Found pending record to update: {check_result['data']['records'][0]}")
+                existing_record = check_result['data']['records'][0]
+                logger.info(f"Found pending record to update: {existing_record}")
 
-                # UPDATE with both id and user_id filters for safety
+                # Try UPDATE first
                 update_result = db.update("app_pending_analyses",
                                         filters=[
                                             {"field": "id", "operator": "eq", "value": entry_id},
@@ -303,8 +304,41 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
                 if update_result.get('success'):
                     logger.info(f"Status updated to completed for entry {entry_id}")
                 else:
-                    logger.error(f"Failed to update status for {entry_id}: {update_result.get('error')}")
+                    logger.error(f"UPDATE failed for {entry_id}: {update_result.get('error')}")
                     logger.error(f"Update result: {json.dumps(update_result)}")
+
+                    # Fallback: Try delete and rewrite approach
+                    logger.info("Attempting fallback: delete and rewrite")
+
+                    # Delete the old record
+                    delete_result = db.delete("app_pending_analyses",
+                                            filters=[
+                                                {"field": "id", "operator": "eq", "value": entry_id},
+                                                {"field": "user_id", "operator": "eq", "value": user_id}
+                                            ])
+
+                    if delete_result.get('success'):
+                        logger.info(f"Deleted old record for {entry_id}")
+
+                        # Write new record with updated status
+                        new_record = {
+                            "id": entry_id,
+                            "user_id": user_id,
+                            "status": "completed",
+                            "category": category,
+                            "created_at": existing_record.get('created_at'),
+                            "updated_at": datetime.utcnow().isoformat(),
+                            "completed_at": datetime.utcnow().isoformat()
+                        }
+
+                        write_result = db.write("app_pending_analyses", [new_record])
+
+                        if write_result.get('success'):
+                            logger.info(f"Successfully rewrote record with completed status for {entry_id}")
+                        else:
+                            logger.error(f"Failed to rewrite record: {write_result.get('error')}")
+                    else:
+                        logger.error(f"Failed to delete old record: {delete_result.get('error')}")
             else:
                 logger.error(f"Could not find pending record for entry_id={entry_id}, user_id={user_id}")
                 logger.error(f"Query result: {json.dumps(check_result)}")
