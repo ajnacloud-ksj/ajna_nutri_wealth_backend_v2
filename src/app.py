@@ -131,13 +131,14 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 }
 
                 # Process SQS messages
-                from src.handlers import analyze_async
+                # Import from handlers (not src.handlers) because PYTHONPATH includes /var/task/src
+                from handlers import analyze_async
                 return analyze_async.process_sqs_messages(event, handler_context)
 
         # Check if this is an async processing request (legacy Lambda invoke)
         if event.get('source') == 'async-processing':
             logger.info("Processing async Lambda invocation (legacy)")
-            from src.handlers import analyze_async
+            from handlers import analyze_async
             return analyze_async.process_async_request(event, context)
         
         # Get tenant configuration from request

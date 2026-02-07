@@ -12,7 +12,7 @@ from datetime import datetime
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.lib.ibex_client_optimized import IbexClientOptimized
+from src.lib.ibex_client_optimized import OptimizedIbexClient
 
 def make_user_admin(email: str, api_url: str = None):
     """
@@ -28,7 +28,7 @@ def make_user_admin(email: str, api_url: str = None):
         api_key = os.environ.get('IBEX_API_KEY', 'McuMsuWDXo1g9zqLBBzVy3uXsIKDklGT8GbIhpyl')
 
         print(f"🔌 Connecting to IBEX: {ibex_url}")
-        db = IbexClientOptimized(ibex_url, api_key, tenant_id="app_")
+        db = OptimizedIbexClient(ibex_url, api_key, tenant_id="app_")
 
         # Query for user by email
         print(f"🔍 Looking for user with email: {email}")
@@ -96,7 +96,7 @@ def list_all_users(api_url: str = None):
         ibex_url = api_url or os.environ.get('IBEX_API_URL', 'https://qo34glxdv2ltion76gjfvhvdp40dcscb.lambda-url.ap-south-1.on.aws/')
         api_key = os.environ.get('IBEX_API_KEY', 'McuMsuWDXo1g9zqLBBzVy3uXsIKDklGT8GbIhpyl')
 
-        db = IbexClientOptimized(ibex_url, api_key, tenant_id="app_")
+        db = OptimizedIbexClient(ibex_url, api_key, tenant_id="app_")
 
         result = db.query("users_v4", limit=100)
 
