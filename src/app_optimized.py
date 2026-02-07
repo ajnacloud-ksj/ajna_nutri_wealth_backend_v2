@@ -75,6 +75,22 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             first_record = event['Records'][0]
             if first_record.get('eventSource') == 'aws:sqs':
                 logger.info("Processing SQS messages")
+
+                # For SQS, we need to set up the database context
+                # Use default tenant configuration for internal processing
+                tenant_config = {
+                    'tenant_id': 'default',
+                    'namespace': 'default'
+                }
+
+                # Create database client for SQS processing
+                tenant_db = TenantManager.create_ibex_client(tenant_config, client_class=IbexClient)
+
+                # Add to context
+                context = context or {}
+                context['db'] = tenant_db
+                context['tenant'] = tenant_config
+
                 from handlers import analyze_async
                 return analyze_async.process_sqs_messages(event, context)
 
