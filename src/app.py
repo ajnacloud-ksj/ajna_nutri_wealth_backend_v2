@@ -208,3 +208,4 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 # Docker fix for Lambda: Fri Feb  6 21:38:07 EST 2026
 # Force rebuild - Sun Feb  8 08:01:44 EST 2026
 # Cache optimization - Sat Feb  8 08:13:51 EST 2026
+# Fix skip_versioning for soft deletes - Sat Feb  8 08:19:23 EST 2026

@@ -225,10 +225,10 @@ class OptimizedIbexClient:
     # Optimized Query Method
     def query(self, table: str, filters: List[Dict] = None, limit: int = 100,
               offset: int = 0, sort: List[Dict] = None, use_cache: bool = True,
-              skip_versioning: bool = True) -> Dict[str, Any]:
+              skip_versioning: bool = False) -> Dict[str, Any]:
         """
         Optimized query with caching
-        skip_versioning: True for read-only operations (bypasses expensive window functions)
+        skip_versioning: MUST be False for tables with soft deletes to work correctly
         """
         # CRITICAL: Never cache tables with real-time requirements
         if table in NEVER_CACHE_TABLES:
@@ -246,7 +246,7 @@ class OptimizedIbexClient:
             "table": table,
             "limit": limit,
             "offset": offset,
-            "skip_versioning": skip_versioning  # Add optimization flag
+            "skip_versioning": False  # MUST be False for soft deletes to work correctly
         }
 
         if filters:
