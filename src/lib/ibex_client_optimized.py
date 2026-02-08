@@ -21,11 +21,19 @@ GLOBAL_CACHE = OrderedDict()
 CACHE_STATS = {"hits": 0, "misses": 0, "evictions": 0}
 CACHE_LOCK = threading.Lock()
 
-# Cache configuration
-MAX_CACHE_SIZE = 100  # Maximum number of cached items
-CACHE_TTL_SECONDS = 300  # 5 minutes TTL
-READ_CACHE_TTL = 60  # 1 minute for read operations
-WRITE_THROUGH_CACHE = True  # Update cache on writes
+# Cache configuration - Optimized for production with very short TTLs
+# Short TTLs prevent stale data issues while still providing performance benefits
+import os
+
+# Allow environment-based cache control
+CACHE_ENABLED = os.environ.get('IBEX_CACHE_ENABLED', 'true').lower() == 'true'
+MAX_CACHE_SIZE = 100 if CACHE_ENABLED else 0  # Maximum number of cached items
+CACHE_TTL_SECONDS = 30 if CACHE_ENABLED else 0  # 30 seconds for non-critical data
+READ_CACHE_TTL = 5 if CACHE_ENABLED else 0  # 5 seconds for read operations (very short)
+WRITE_THROUGH_CACHE = CACHE_ENABLED  # Update cache on writes only if enabled
+
+# Critical operations that should NEVER be cached
+NEVER_CACHE_TABLES = {'app_pending_analyses', 'food_entries'}  # Tables with real-time requirements
 
 class OptimizedIbexClient:
     """
@@ -179,9 +187,9 @@ class OptimizedIbexClient:
         """Intelligent call routing with caching"""
         self.stats["total_requests"] += 1
 
-        # Check cache for read operations
+        # Check cache for read operations (only if cache is enabled)
         operation = payload.get("operation", "")
-        if use_cache and operation in ["QUERY", "LIST_TABLES", "DESCRIBE_TABLE"]:
+        if use_cache and MAX_CACHE_SIZE > 0 and operation in ["QUERY", "LIST_TABLES", "DESCRIBE_TABLE"]:
             # Remove operation from payload to avoid duplicate argument error
             cache_params = payload.copy()
             if "operation" in cache_params:
@@ -200,8 +208,8 @@ class OptimizedIbexClient:
         else:
             result = self._call_api(payload, timeout)
 
-        # Cache successful read operations
-        if use_cache and operation in ["QUERY", "LIST_TABLES", "DESCRIBE_TABLE"]:
+        # Cache successful read operations (only if cache is enabled)
+        if use_cache and MAX_CACHE_SIZE > 0 and operation in ["QUERY", "LIST_TABLES", "DESCRIBE_TABLE"]:
             if result.get("success"):
                 # Remove operation from payload to avoid duplicate argument error
                 cache_params = payload.copy()
@@ -209,7 +217,8 @@ class OptimizedIbexClient:
                     del cache_params["operation"]
                 cache_key = self._get_cache_key(operation, **cache_params)
                 ttl = READ_CACHE_TTL if operation == "QUERY" else CACHE_TTL_SECONDS
-                self._put_in_cache(cache_key, result, ttl)
+                if ttl > 0:  # Only cache if TTL is positive
+                    self._put_in_cache(cache_key, result, ttl)
 
         return result
 
@@ -221,8 +230,12 @@ class OptimizedIbexClient:
         Optimized query with caching
         skip_versioning: True for read-only operations (bypasses expensive window functions)
         """
-        # For single ID lookups, use special cache
-        if filters and len(filters) == 1 and filters[0].get("field") == "id":
+        # CRITICAL: Never cache tables with real-time requirements
+        if table in NEVER_CACHE_TABLES:
+            use_cache = False
+
+        # For single ID lookups, use special cache (unless it's a critical table)
+        if use_cache and filters and len(filters) == 1 and filters[0].get("field") == "id":
             cache_key = f"id:{table}:{filters[0].get('value')}"
             cached = self._get_from_cache(cache_key)
             if cached:
@@ -243,15 +256,16 @@ class OptimizedIbexClient:
 
         result = self._call(payload, use_cache=use_cache)
 
-        # Cache individual records by ID for faster lookups
-        if result.get("success") and result.get("data", {}).get("records"):
-            for record in result["data"]["records"]:
-                if "id" in record:
-                    id_cache_key = f"id:{table}:{record['id']}"
-                    self._put_in_cache(id_cache_key, {
-                        "success": True,
-                        "data": {"records": [record]}
-                    }, ttl=READ_CACHE_TTL)
+        # Cache individual records by ID for faster lookups (only for non-critical tables)
+        if use_cache and table not in NEVER_CACHE_TABLES:
+            if result.get("success") and result.get("data", {}).get("records"):
+                for record in result["data"]["records"]:
+                    if "id" in record:
+                        id_cache_key = f"id:{table}:{record['id']}"
+                        self._put_in_cache(id_cache_key, {
+                            "success": True,
+                            "data": {"records": [record]}
+                        }, ttl=READ_CACHE_TTL)
 
         return result
 
