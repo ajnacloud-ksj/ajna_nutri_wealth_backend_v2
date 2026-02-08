@@ -111,7 +111,8 @@ def list_data(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         if offset > 0:
             kwargs["offset"] = offset
 
-        result = db.query(db_table_name, **kwargs, use_cache=False)
+        # Explicitly exclude deleted records (soft delete)
+        result = db.query(db_table_name, **kwargs, use_cache=False, include_deleted=False)
 
         if result and result.get('success'):
             data = result.get('data', {})
@@ -269,7 +270,8 @@ def get_data_by_id(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, 
         filters.append({"field": "user_id", "operator": "eq", "value": user_id})
 
     try:
-        result = db.query(db_table_name, filters=filters, limit=1, use_cache=False)
+        # Explicitly exclude deleted records (soft delete)
+        result = db.query(db_table_name, filters=filters, limit=1, use_cache=False, include_deleted=False)
 
         if result and result.get('success'):
             data = result.get('data', {})
