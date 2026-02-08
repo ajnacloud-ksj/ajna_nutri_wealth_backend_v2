@@ -305,7 +305,8 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
 
                 update_result = db.update("app_pending_analyses",
                                         filters=[
-                                            {"field": "id", "operator": "eq", "value": entry_id}
+                                            {"field": "id", "operator": "eq", "value": entry_id},
+                                            {"field": "user_id", "operator": "eq", "value": user_id}
                                         ],
                                         updates={
                                             "status": "completed",
