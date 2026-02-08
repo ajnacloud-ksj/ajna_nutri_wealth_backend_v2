@@ -34,9 +34,13 @@ def get_allowed_origins():
 
 
 def get_cors_headers(event: Dict[str, Any] = None) -> Dict[str, str]:
-    # AWS Lambda Function URL handles CORS (configured to return *)
-    # We must NOT return duplicate headers, or browsers will block the request.
-    return {}
+    # Lambda Function URL no longer handles CORS, so we return headers here
+    return {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "*",
+        "Access-Control-Allow-Methods": "*",
+        "Access-Control-Allow-Credentials": "true"
+    }
 
 
 def respond(status_code, body, is_base64=False, event=None):
