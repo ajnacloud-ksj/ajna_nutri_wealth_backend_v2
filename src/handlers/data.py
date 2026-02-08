@@ -111,7 +111,7 @@ def list_data(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         if offset > 0:
             kwargs["offset"] = offset
 
-        result = db.query(db_table_name, use_cache=False, **kwargs)
+        result = db.query(db_table_name, **kwargs, use_cache=False)
 
         if result and result.get('success'):
             data = result.get('data', {})
@@ -269,7 +269,7 @@ def get_data_by_id(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, 
         filters.append({"field": "user_id", "operator": "eq", "value": user_id})
 
     try:
-        result = db.query(db_table_name, filters=filters, limit=1)
+        result = db.query(db_table_name, filters=filters, limit=1, use_cache=False)
 
         if result and result.get('success'):
             data = result.get('data', {})
@@ -342,7 +342,7 @@ def update_data(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any
 
         if result and result.get('success'):
             # Get updated record
-            get_result = db.query(db_table_name, filters=[{"field": "id", "operator": "eq", "value": item_id}], limit=1)
+            get_result = db.query(db_table_name, filters=[{"field": "id", "operator": "eq", "value": item_id}], limit=1, use_cache=False)
 
             if get_result and get_result.get('success'):
                 records = get_result.get('data', {}).get('records', [])
