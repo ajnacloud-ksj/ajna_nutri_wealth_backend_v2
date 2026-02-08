@@ -125,13 +125,15 @@ def get_analysis_status(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         db = context.get('db')
         
         # Query pending_analyses table
+        # IMPORTANT: use_cache=False to get latest data after UPDATE operations
         logger.info(f"Checking status for entry_id: {entry_id}, user_id: {user_id}")
         result = db.query("app_pending_analyses",
                          filters=[
                              {"field": "id", "operator": "eq", "value": entry_id},
                              {"field": "user_id", "operator": "eq", "value": user_id}
                          ],
-                         limit=1)
+                         limit=1,
+                         use_cache=False)  # Critical: Bypass cache to get latest version
         logger.info(f"Query result success: {result.get('success')}, records: {len(result.get('data', {}).get('records', []))}")
         
         if result.get('success') and result.get('data', {}).get('records'):
