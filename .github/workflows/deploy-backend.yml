@@ -28,13 +28,53 @@ jobs:
       lambda-function-name: ajna_nutri_wealth_backend_v2
       image-uri: ${{ needs.build-and-push.outputs.image-uri }}
       role-to-assume: arn:aws:iam::808527335982:role/GitHubActions-Deploy-Role
-      # Pass environment variables INCLUDING AI KEYS EXPLICITLY
-      environment-variables: "AUTH_MODE=cognito,ENABLE_LAMBDA_ASYNC=false,ENABLE_SQS=true,ANALYSIS_QUEUE_URL=${{ vars.ANALYSIS_QUEUE_URL }},ANALYSIS_DLQ_URL=${{ vars.ANALYSIS_DLQ_URL }},IBEX_LAMBDA_NAME=${{ vars.IBEX_LAMBDA_NAME }},IBEX_API_URL=${{ vars.IBEX_API_URL }},COGNITO_REGION=ap-south-1,COGNITO_USER_POOL_ID=${{ vars.COGNITO_USER_POOL_ID }},COGNITO_CLIENT_ID=${{ vars.COGNITO_CLIENT_ID }},OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},GROQ_API_KEY=${{ secrets.GROQ_API_KEY }},IBEX_API_KEY=${{ secrets.IBEX_API_KEY }}"
+      # Base environment variables (secrets will be set in next job)
+      environment-variables: "AUTH_MODE=cognito,ENABLE_LAMBDA_ASYNC=false,ENABLE_SQS=true,ANALYSIS_QUEUE_URL=${{ vars.ANALYSIS_QUEUE_URL }},ANALYSIS_DLQ_URL=${{ vars.ANALYSIS_DLQ_URL }},IBEX_LAMBDA_NAME=${{ vars.IBEX_LAMBDA_NAME }},IBEX_API_URL=${{ vars.IBEX_API_URL }},COGNITO_REGION=ap-south-1,COGNITO_USER_POOL_ID=${{ vars.COGNITO_USER_POOL_ID }},COGNITO_CLIENT_ID=${{ vars.COGNITO_CLIENT_ID }}"
     secrets: inherit
+
+  configure-api-keys:
+    name: Configure API Keys
+    needs: deploy-lambda
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::808527335982:role/GitHubActions-Deploy-Role
+          aws-region: ap-south-1
+
+      - name: Update Lambda environment variables with API keys
+        run: |
+          echo "Updating Lambda with API keys..."
+
+          # Get current environment variables
+          CURRENT_ENV=$(aws lambda get-function-configuration \
+            --function-name ajna_nutri_wealth_backend_v2 \
+            --query 'Environment.Variables' \
+            --output json || echo '{}')
+
+          # Merge with API keys
+          UPDATED_ENV=$(echo "$CURRENT_ENV" | jq \
+            --arg openai "${{ secrets.OPENAI_API_KEY }}" \
+            --arg groq "${{ secrets.GROQ_API_KEY }}" \
+            --arg ibex "${{ secrets.IBEX_API_KEY }}" \
+            '. + {
+              "OPENAI_API_KEY": $openai,
+              "GROQ_API_KEY": $groq,
+              "IBEX_API_KEY": $ibex
+            }')
+
+          # Update Lambda configuration
+          aws lambda update-function-configuration \
+            --function-name ajna_nutri_wealth_backend_v2 \
+            --environment "Variables=$UPDATED_ENV" \
+            --output json > /dev/null
+
+          echo "✅ API keys configured successfully"
 
   configure-sqs-trigger:
     name: Configure SQS Trigger for Async Processing
-    needs: deploy-lambda
+    needs: configure-api-keys
     runs-on: ubuntu-latest
 
     steps:
