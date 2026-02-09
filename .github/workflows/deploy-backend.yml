@@ -28,8 +28,8 @@ jobs:
       lambda-function-name: ajna_nutri_wealth_backend_v2
       image-uri: ${{ needs.build-and-push.outputs.image-uri }}
       role-to-assume: arn:aws:iam::808527335982:role/GitHubActions-Deploy-Role
-      # Pass environment variables (Secrets are automatically injected by reusable workflow)
-      environment-variables: "AUTH_MODE=cognito,ENABLE_LAMBDA_ASYNC=false,ENABLE_SQS=true,ANALYSIS_QUEUE_URL=${{ vars.ANALYSIS_QUEUE_URL }},ANALYSIS_DLQ_URL=${{ vars.ANALYSIS_DLQ_URL }},IBEX_LAMBDA_NAME=${{ vars.IBEX_LAMBDA_NAME }},IBEX_API_URL=${{ vars.IBEX_API_URL }},COGNITO_REGION=ap-south-1,COGNITO_USER_POOL_ID=${{ vars.COGNITO_USER_POOL_ID }},COGNITO_CLIENT_ID=${{ vars.COGNITO_CLIENT_ID }}"
+      # Pass environment variables INCLUDING AI KEYS EXPLICITLY
+      environment-variables: "AUTH_MODE=cognito,ENABLE_LAMBDA_ASYNC=false,ENABLE_SQS=true,ANALYSIS_QUEUE_URL=${{ vars.ANALYSIS_QUEUE_URL }},ANALYSIS_DLQ_URL=${{ vars.ANALYSIS_DLQ_URL }},IBEX_LAMBDA_NAME=${{ vars.IBEX_LAMBDA_NAME }},IBEX_API_URL=${{ vars.IBEX_API_URL }},COGNITO_REGION=ap-south-1,COGNITO_USER_POOL_ID=${{ vars.COGNITO_USER_POOL_ID }},COGNITO_CLIENT_ID=${{ vars.COGNITO_CLIENT_ID }},OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},GROQ_API_KEY=${{ secrets.GROQ_API_KEY }},IBEX_API_KEY=${{ secrets.IBEX_API_KEY }}"
     secrets: inherit
 
   configure-sqs-trigger:
