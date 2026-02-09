@@ -124,20 +124,38 @@ def get_analysis_status(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
         db = context.get('db')
         
-        # Query pending_analyses table
+        # Query pending_analyses table with retry logic for cache consistency
         # IMPORTANT: use_cache=False to get latest data after UPDATE operations
         logger.info(f"Checking status for entry_id: {entry_id}, user_id: {user_id}")
-        result = db.query("app_pending_analyses",
-                         filters=[
-                             {"field": "id", "operator": "eq", "value": entry_id},
-                             {"field": "user_id", "operator": "eq", "value": user_id}
-                         ],
-                         limit=1,
-                         use_cache=False)  # Critical: Bypass cache to get latest version
-        logger.info(f"Query result success: {result.get('success')}, records: {len(result.get('data', {}).get('records', []))}")
-        
-        if result.get('success') and result.get('data', {}).get('records'):
-            record = result['data']['records'][0]
+
+        # Try up to 3 times with small delay to handle cache lag
+        record = None
+        for attempt in range(3):
+            result = db.query("app_pending_analyses",
+                             filters=[
+                                 {"field": "id", "operator": "eq", "value": entry_id},
+                                 {"field": "user_id", "operator": "eq", "value": user_id}
+                             ],
+                             limit=1,
+                             use_cache=False,  # Critical: Bypass cache to get latest version
+                             include_deleted=False)
+
+            if result.get('success') and result.get('data', {}).get('records'):
+                temp_record = result['data']['records'][0]
+                # If we get a newer version or completed status, use it
+                if not record or temp_record.get('_version', 0) > record.get('_version', 0) or temp_record.get('status') == 'completed':
+                    record = temp_record
+                    if record.get('status') == 'completed':
+                        break
+
+            # Small delay between attempts to allow cache to refresh
+            if attempt < 2:
+                import time
+                time.sleep(0.5)
+
+        logger.info(f"Query result - found: {bool(record)}, status: {record.get('status') if record else 'N/A'}")
+
+        if record:
             status = record.get('status', 'pending')
             
             response = {
