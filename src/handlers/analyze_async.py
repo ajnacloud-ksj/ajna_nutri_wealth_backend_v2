@@ -49,6 +49,9 @@ def submit_analysis(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             "id": entry_id,
             "user_id": user_id,
             "status": "pending",
+            "description": description,
+            "image_url": image_url,
+            "category": "food",  # Default to food category
             "created_at": datetime.utcnow().isoformat(),
             "updated_at": datetime.utcnow().isoformat()
         }])
