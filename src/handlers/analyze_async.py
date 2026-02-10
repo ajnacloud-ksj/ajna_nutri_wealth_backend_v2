@@ -56,18 +56,21 @@ def submit_analysis(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             "updated_at": datetime.utcnow().isoformat()
         }])
         
-        # 2. Send to SQS queue (instead of Lambda.invoke)
+        # 2. Send to SQS queue - DO NOT send image data, only references
         sqs = boto3.client('sqs')
         # Use full URL for SQS (not just queue name)
         queue_url = os.environ.get('ANALYSIS_QUEUE_URL',
                                    'https://sqs.ap-south-1.amazonaws.com/808527335982/nutriwealth-analysis-queue')
 
+        # Only send minimal data in SQS message
+        # The image_url is already stored in the database
         message = {
             "source": "sqs-processing",
             "entry_id": entry_id,
             "user_id": user_id,
             "description": description,
-            "image_url": image_url,
+            # DO NOT send image_url in SQS - it's already in the database!
+            # The processor will retrieve it from pending_analyses table
             # Add IBEX credentials to ensure async processor can access DB
             # CRITICAL: Must use EXACT same tenant_id as the db.write above!
             "ibex_config": {
@@ -244,12 +247,10 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
     try:
         # The event is now the parsed message payload
         payload = event
-        
+
         user_id = payload.get('user_id')
         entry_id = payload.get('entry_id')
-        description = payload.get('description')
-        image_url = payload.get('image_url')
-        
+
         if not user_id or not entry_id:
             logger.error("Missing required fields in async event")
             return {"statusCode": 400, "body": "Missing user_id or entry_id"}
@@ -278,13 +279,36 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
         )
 
         logger.info(f"Async processor using IBEX at {api_url} with tenant={final_tenant_id}, namespace={final_namespace}")
-        logger.info(f"Processing entry_id={entry_id} for user_id={user_id}")
-        
+
         # Enable Direct Lambda invocation to avoid 403 errors
         lambda_name = os.environ.get('IBEX_LAMBDA_NAME') or 'ibex-db-lambda'
         if hasattr(db, 'enable_direct_lambda') and lambda_name:
             db.enable_direct_lambda(lambda_name)
             logger.info(f"Direct Lambda invocation enabled for async processing: {lambda_name}")
+
+        # Retrieve the full record from pending_analyses to get image_url and description
+        logger.info(f"Retrieving pending analysis record for entry_id={entry_id}")
+
+        result = db.query("app_pending_analyses",
+                         filters=[
+                             {"field": "id", "operator": "eq", "value": entry_id},
+                             {"field": "user_id", "operator": "eq", "value": user_id}
+                         ],
+                         limit=1,
+                         use_cache=False)  # Don't use cache to get latest data
+
+        if not result.get('success') or not result.get('data', {}).get('records'):
+            logger.error(f"Pending analysis record not found for entry_id={entry_id}")
+            return {"statusCode": 404, "body": "Analysis record not found"}
+
+        pending_record = result['data']['records'][0]
+        description = pending_record.get('description')
+        image_url = pending_record.get('image_url')
+
+        logger.info(f"Processing entry_id={entry_id} for user_id={user_id}")
+        logger.info(f"Description: {description[:50] if description else 'None'}...")
+        logger.info(f"Has image: {bool(image_url)}")
+
         ai_service = OptimizedAIService(db)
 
         # Process with AI
