@@ -2,7 +2,7 @@ import json
 import os
 import uuid
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Optional
 
 from src.lib.auth_provider import get_user_id
 from src.lib.logger import logger
@@ -324,7 +324,7 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
             
             # Store result based on category
             if category == 'food':
-                _store_food_result(db, user_id, entry_id, data, image_url)
+                _store_food_result(db, user_id, entry_id, data, image_url, description)
             elif category == 'receipt':
                 _store_receipt_result(db, user_id, entry_id, data, image_url)
             
@@ -408,7 +408,7 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
         return {"statusCode": 500, "body": str(e)}
 
 
-def _store_food_result(db, user_id: str, entry_id: str, data: Dict, image_url: str):
+def _store_food_result(db, user_id: str, entry_id: str, data: Dict, image_url: str, description: Optional[str] = None):
     """Store food analysis result"""
     food_items = data.get('food_items', [])
 
@@ -430,10 +430,21 @@ def _store_food_result(db, user_id: str, entry_id: str, data: Dict, image_url: s
         total_fiber += (item.get('fiber', 0) * quantity)
         total_sodium += (item.get('sodium', 0) * quantity)
 
+    # Use the original description if available, otherwise construct from food items
+    if description:
+        final_description = description
+    else:
+        # Fallback: create description from food items
+        if food_items:
+            food_names = [item.get('name', 'Food') for item in food_items[:3]]  # First 3 items
+            final_description = ', '.join(food_names)
+        else:
+            final_description = 'Food'
+
     db.write("app_food_entries_v2", [{
         "id": entry_id,
         "user_id": user_id,
-        "description": food_items[0].get('name', 'Food') if food_items else 'Food',
+        "description": final_description,
         "meal_type": data.get('meal_type', 'snack'),
         "calories": total_calories,
         "total_protein": total_protein,
@@ -443,7 +454,9 @@ def _store_food_result(db, user_id: str, entry_id: str, data: Dict, image_url: s
         "total_sodium": total_sodium,
         "image_url": image_url or '',
         "extracted_nutrients": json.dumps(data),
-        "created_at": datetime.utcnow().isoformat()
+        "analysis_status": "completed",  # Mark as completed
+        "created_at": datetime.utcnow().isoformat(),
+        "updated_at": datetime.utcnow().isoformat()
     }])
 
 
