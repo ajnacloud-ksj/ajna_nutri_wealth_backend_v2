@@ -43,38 +43,79 @@ jobs:
           role-to-assume: arn:aws:iam::808527335982:role/GitHubActions-Deploy-Role
           aws-region: ap-south-1
 
+      - name: Validate required secrets
+        run: |
+          echo "Validating required GitHub secrets..."
+
+          MISSING_SECRETS=""
+
+          if [ -z "${{ secrets.OPENAI_API_KEY }}" ]; then
+            echo "❌ ERROR: OPENAI_API_KEY secret is not configured in GitHub"
+            MISSING_SECRETS="${MISSING_SECRETS}OPENAI_API_KEY "
+          else
+            echo "✅ OPENAI_API_KEY is configured"
+          fi
+
+          if [ -z "${{ secrets.GROQ_API_KEY }}" ]; then
+            echo "❌ ERROR: GROQ_API_KEY secret is not configured in GitHub"
+            MISSING_SECRETS="${MISSING_SECRETS}GROQ_API_KEY "
+          else
+            echo "✅ GROQ_API_KEY is configured"
+          fi
+
+          if [ -z "${{ secrets.IBEX_API_KEY }}" ]; then
+            echo "❌ ERROR: IBEX_API_KEY secret is not configured in GitHub"
+            MISSING_SECRETS="${MISSING_SECRETS}IBEX_API_KEY "
+          else
+            echo "✅ IBEX_API_KEY is configured"
+          fi
+
+          if [ -n "$MISSING_SECRETS" ]; then
+            echo ""
+            echo "🚨 DEPLOYMENT FAILED: Required secrets are missing"
+            echo "Missing secrets: $MISSING_SECRETS"
+            echo ""
+            echo "To fix this:"
+            echo "1. Go to: https://github.com/ajnacloud-ksj/ajna_nutri_wealth_backend_v2/settings/secrets/actions"
+            echo "2. Click 'New repository secret' for each missing secret"
+            echo "3. Add the API keys with the exact names shown above"
+            echo ""
+            exit 1
+          fi
+
+          echo "✅ All required secrets are configured"
+
       - name: Update Lambda environment variables with API keys
         run: |
-          echo "Updating Lambda with API keys..."
+          echo "Configuring Lambda with API keys from GitHub secrets..."
 
-          # Get current environment variables
+          # Get current environment variables (for non-secret vars)
           CURRENT_ENV=$(aws lambda get-function-configuration \
             --function-name ajna_nutri_wealth_backend_v2 \
             --query 'Environment.Variables' \
             --output json || echo '{}')
 
-          # Merge with API keys - using default values if secrets are not set
-          # These will be empty strings if secrets are not configured in GitHub
+          # Update with secrets from GitHub (single source of truth)
           UPDATED_ENV=$(echo "$CURRENT_ENV" | jq \
             --arg openai "${{ secrets.OPENAI_API_KEY }}" \
             --arg groq "${{ secrets.GROQ_API_KEY }}" \
             --arg ibex "${{ secrets.IBEX_API_KEY }}" \
             '. + {
-              "OPENAI_API_KEY": (if $openai != "" then $openai else .OPENAI_API_KEY end),
-              "GROQ_API_KEY": (if $groq != "" then $groq else .GROQ_API_KEY end),
-              "IBEX_API_KEY": (if $ibex != "" then $ibex else .IBEX_API_KEY end)
+              "OPENAI_API_KEY": $openai,
+              "GROQ_API_KEY": $groq,
+              "IBEX_API_KEY": $ibex
             }')
 
           # Write to file to avoid shell escaping issues
           echo "$UPDATED_ENV" > /tmp/env_vars.json
 
-          # Update Lambda configuration using CLI input JSON
+          # Update Lambda configuration
           aws lambda update-function-configuration \
             --function-name ajna_nutri_wealth_backend_v2 \
             --cli-input-json "{\"Environment\": {\"Variables\": $(cat /tmp/env_vars.json)}}" \
             --output json > /dev/null
 
-          echo "✅ API keys configured successfully"
+          echo "✅ Lambda configured with API keys from GitHub secrets"
 
   configure-sqs-trigger:
     name: Configure SQS Trigger for Async Processing
