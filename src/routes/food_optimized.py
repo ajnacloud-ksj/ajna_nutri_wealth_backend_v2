@@ -178,6 +178,33 @@ def get_food_entries_optimized():
                     except:
                         pass
 
+                # Compute nutrition totals on the fly from food_items
+                extracted = record.get('extracted_nutrients', {})
+                if extracted and isinstance(extracted, dict):
+                    food_items = extracted.get('food_items', [])
+                    if food_items:
+                        total_protein = 0
+                        total_carbohydrates = 0
+                        total_fats = 0
+                        total_fiber = 0
+                        total_sodium = 0
+
+                        for item in food_items:
+                            quantity = item.get('quantity', 1)
+                            # Check both singular and plural field names
+                            total_protein += (item.get('protein', item.get('proteins', 0)) * quantity)
+                            total_carbohydrates += (item.get('carbs', item.get('carbohydrates', 0)) * quantity)
+                            total_fats += (item.get('fat', item.get('fats', 0)) * quantity)
+                            total_fiber += (item.get('fiber', 0) * quantity)
+                            total_sodium += (item.get('sodium', 0) * quantity)
+
+                        # Add computed totals to the record
+                        record['total_protein'] = total_protein
+                        record['total_carbohydrates'] = total_carbohydrates
+                        record['total_fats'] = total_fats
+                        record['total_fiber'] = total_fiber
+                        record['total_sodium'] = total_sodium
+
                 # Remove base64 images from response (use URLs instead)
                 if 'image_data' in record:
                     del record['image_data']

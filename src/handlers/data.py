@@ -13,6 +13,7 @@ from lib.auth_provider import require_auth, get_user_id
 from lib.validators import validate_request, ValidationError
 from lib.logger import logger, log_handler
 from utils.http import respond
+from utils.nutrition_calculator import enrich_food_entries
 
 
 # Table configuration
@@ -124,6 +125,10 @@ def list_data(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
                 cleaned = {k: v for k, v in record.items() if not k.startswith('_')}
                 cleaned = sanitize_json_response(cleaned)
                 cleaned_records.append(cleaned)
+
+            # Compute nutrition totals on the fly for food_entries
+            if table_name == 'food_entries':
+                cleaned_records = enrich_food_entries(cleaned_records)
 
             logger.info(
                 f"Retrieved {len(cleaned_records)} records from {table_name}",

@@ -411,7 +411,24 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
 def _store_food_result(db, user_id: str, entry_id: str, data: Dict, image_url: str):
     """Store food analysis result"""
     food_items = data.get('food_items', [])
-    total_calories = sum(item.get('calories', 0) for item in food_items)
+
+    # Calculate totals from food_items
+    total_calories = 0
+    total_protein = 0
+    total_carbohydrates = 0
+    total_fats = 0
+    total_fiber = 0
+    total_sodium = 0
+
+    for item in food_items:
+        quantity = item.get('quantity', 1)
+        total_calories += (item.get('calories', 0) * quantity)
+        # Check both singular and plural field names
+        total_protein += (item.get('protein', item.get('proteins', 0)) * quantity)
+        total_carbohydrates += (item.get('carbs', item.get('carbohydrates', 0)) * quantity)
+        total_fats += (item.get('fat', item.get('fats', 0)) * quantity)
+        total_fiber += (item.get('fiber', 0) * quantity)
+        total_sodium += (item.get('sodium', 0) * quantity)
 
     db.write("app_food_entries_v2", [{
         "id": entry_id,
@@ -419,6 +436,11 @@ def _store_food_result(db, user_id: str, entry_id: str, data: Dict, image_url: s
         "description": food_items[0].get('name', 'Food') if food_items else 'Food',
         "meal_type": data.get('meal_type', 'snack'),
         "calories": total_calories,
+        "total_protein": total_protein,
+        "total_carbohydrates": total_carbohydrates,
+        "total_fats": total_fats,
+        "total_fiber": total_fiber,
+        "total_sodium": total_sodium,
         "image_url": image_url or '',
         "extracted_nutrients": json.dumps(data),
         "created_at": datetime.utcnow().isoformat()
