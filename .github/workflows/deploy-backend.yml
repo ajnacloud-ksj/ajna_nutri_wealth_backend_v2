@@ -45,7 +45,7 @@ jobs:
 
       - name: Update Lambda environment variables with API keys
         run: |
-          echo "Checking for API key secrets..."
+          echo "Updating Lambda with API keys..."
 
           # Get current environment variables
           CURRENT_ENV=$(aws lambda get-function-configuration \
@@ -53,42 +53,28 @@ jobs:
             --query 'Environment.Variables' \
             --output json || echo '{}')
 
-          # Start with current environment
-          UPDATED_ENV="$CURRENT_ENV"
+          # Merge with API keys - using default values if secrets are not set
+          # These will be empty strings if secrets are not configured in GitHub
+          UPDATED_ENV=$(echo "$CURRENT_ENV" | jq \
+            --arg openai "${{ secrets.OPENAI_API_KEY }}" \
+            --arg groq "${{ secrets.GROQ_API_KEY }}" \
+            --arg ibex "${{ secrets.IBEX_API_KEY }}" \
+            '. + {
+              "OPENAI_API_KEY": (if $openai != "" then $openai else .OPENAI_API_KEY end),
+              "GROQ_API_KEY": (if $groq != "" then $groq else .GROQ_API_KEY end),
+              "IBEX_API_KEY": (if $ibex != "" then $ibex else .IBEX_API_KEY end)
+            }')
 
-          # Only update keys that are provided as secrets
-          HAS_UPDATES=false
+          # Write to file to avoid shell escaping issues
+          echo "$UPDATED_ENV" > /tmp/env_vars.json
 
-          if [ -n "${{ secrets.OPENAI_API_KEY }}" ]; then
-            echo "Updating OPENAI_API_KEY..."
-            UPDATED_ENV=$(echo "$UPDATED_ENV" | jq --arg key "${{ secrets.OPENAI_API_KEY }}" '. + {"OPENAI_API_KEY": $key}')
-            HAS_UPDATES=true
-          fi
+          # Update Lambda configuration using CLI input JSON
+          aws lambda update-function-configuration \
+            --function-name ajna_nutri_wealth_backend_v2 \
+            --cli-input-json "{\"Environment\": {\"Variables\": $(cat /tmp/env_vars.json)}}" \
+            --output json > /dev/null
 
-          if [ -n "${{ secrets.GROQ_API_KEY }}" ]; then
-            echo "Updating GROQ_API_KEY..."
-            UPDATED_ENV=$(echo "$UPDATED_ENV" | jq --arg key "${{ secrets.GROQ_API_KEY }}" '. + {"GROQ_API_KEY": $key}')
-            HAS_UPDATES=true
-          fi
-
-          if [ -n "${{ secrets.IBEX_API_KEY }}" ]; then
-            echo "Updating IBEX_API_KEY..."
-            UPDATED_ENV=$(echo "$UPDATED_ENV" | jq --arg key "${{ secrets.IBEX_API_KEY }}" '. + {"IBEX_API_KEY": $key}')
-            HAS_UPDATES=true
-          fi
-
-          # Only update if there are changes
-          if [ "$HAS_UPDATES" = "true" ]; then
-            echo "Applying API key updates to Lambda..."
-            aws lambda update-function-configuration \
-              --function-name ajna_nutri_wealth_backend_v2 \
-              --environment "Variables=$UPDATED_ENV" \
-              --output json > /dev/null
-            echo "✅ API keys updated successfully"
-          else
-            echo "ℹ️ No API key secrets provided, keeping existing configuration"
-            # This is not an error - the Lambda already has API keys configured
-          fi
+          echo "✅ API keys configured successfully"
 
   configure-sqs-trigger:
     name: Configure SQS Trigger for Async Processing
