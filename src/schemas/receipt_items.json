@@ -6,7 +6,7 @@
         },
         "receipt_id": {
             "type": "string",
-            "required": false
+            "required": true
         },
         "name": {
             "type": "string",
@@ -16,11 +16,23 @@
             "type": "string",
             "required": false
         },
-        "price": {
+        "sku": {
+            "type": "string",
+            "required": false
+        },
+        "quantity": {
+            "type": "double",
+            "required": false
+        },
+        "unit_price": {
+            "type": "double",
+            "required": false
+        },
+        "total_price": {
             "type": "double",
             "required": true
         },
-        "quantity": {
+        "discount": {
             "type": "double",
             "required": false
         },
@@ -32,15 +44,19 @@
             "type": "string",
             "required": false
         },
-        "sku": {
+        "department": {
             "type": "string",
             "required": false
         },
-        "discount": {
-            "type": "double",
+        "is_taxable": {
+            "type": "boolean",
             "required": false
         },
         "created_at": {
+            "type": "timestamp",
+            "required": false
+        },
+        "updated_at": {
             "type": "timestamp",
             "required": false
         }

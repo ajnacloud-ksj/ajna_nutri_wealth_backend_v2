@@ -59,24 +59,37 @@ class OptimizedAIService:
 
     def _get_classification_prompt(self) -> str:
         """Get the prompt for content classification"""
-        return """You are a classification AI. Analyze the content and determine its category.
+        return """You are an expert content classifier. Analyze the content and determine its category.
 
-Categories:
-- food: Any food, meal, drink, or nutrition-related content
-- receipt: Purchase receipts, bills, invoices, or transaction records
-- workout: Exercise, fitness, gym activities, or physical training
-- unknown: Content that doesn't fit the above categories
+CATEGORIES (choose exactly one):
 
-Consider:
-1. Image content (if provided)
-2. Text description
-3. Context clues
+1. receipt: Purchase receipts, bills, invoices, or transaction records
+   - Key indicators: Store/merchant name, date/time, itemized list with prices, subtotal/tax/total
+   - Look for: Multiple items with prices, payment info, transaction ID, store address
+   - Even if receipt shows food items, it's still a RECEIPT if it's a purchase record
+
+2. food: Actual food, meals, drinks, or dishes (NOT receipts for food purchases)
+   - Key indicators: Visible food/drinks, plates, cooking, restaurants meals
+   - This is for food photos, NOT purchase receipts of food
+
+3. workout: Exercise, fitness, gym activities, or physical training
+   - Key indicators: Exercise equipment, people exercising, fitness tracking, sports
+
+4. unknown: Content that doesn't clearly fit the above categories
+
+IMPORTANT: A grocery receipt or restaurant bill is a RECEIPT, not food.
+A photo of a meal or dish is FOOD, not a receipt.
+
+Analyze:
+1. Visual content if image provided
+2. Text description if provided
+3. Layout and structure (receipts have specific formatting)
 
 Return ONLY a JSON object with:
 {
-    "category": "food|receipt|workout|unknown",
+    "category": "receipt|food|workout|unknown",
     "confidence": 0.0-1.0,
-    "reasoning": "brief explanation"
+    "reasoning": "brief explanation of your decision"
 }"""
 
     def _classify_content(

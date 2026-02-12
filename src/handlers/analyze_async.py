@@ -51,7 +51,7 @@ def submit_analysis(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             "status": "pending",
             "description": description,
             "image_url": image_url,
-            "category": "food",  # Default to food category
+            "category": "unknown",  # Will be determined by AI classification
             "created_at": datetime.utcnow().isoformat(),
             "updated_at": datetime.utcnow().isoformat()
         }])
@@ -461,28 +461,74 @@ def _store_food_result(db, user_id: str, entry_id: str, data: Dict, image_url: s
 
 
 def _store_receipt_result(db, user_id: str, entry_id: str, data: Dict, image_url: str):
-    """Store receipt analysis result"""
-    db.write("app_receipts", [{
+    """Store comprehensive receipt analysis result"""
+
+    # Extract financial summary
+    financial = data.get('financial_summary', {})
+
+    # Extract location info
+    location = data.get('store_location', {})
+
+    # Extract payment info
+    payment = data.get('payment', {})
+
+    # Store main receipt record with all available fields
+    receipt_record = {
         "id": entry_id,
         "user_id": user_id,
         "vendor": data.get('merchant_name', 'Unknown'),
+        "store_address": data.get('store_address', ''),
+        "city": location.get('city', ''),
+        "state": location.get('state', ''),
+        "postal_code": location.get('postal_code', ''),
+        "country": location.get('country', 'USA'),
         "receipt_date": data.get('purchase_date', datetime.utcnow().strftime('%Y-%m-%d')),
-        "total_amount": data.get('total_amount', 0),
+        "receipt_time": data.get('purchase_time', ''),
+        "purchase_channel": data.get('receipt_category', 'Retail'),
+        "total_amount": financial.get('total_amount', data.get('total_amount', 0)),
+        "subtotal": financial.get('subtotal', 0),
+        "tax_amount": financial.get('tax_amount', data.get('tax_amount', 0)),
+        "discount_amount": financial.get('discount_amount', 0),
+        "currency": financial.get('currency', 'USD'),
+        "payment_method": payment.get('method', ''),
+        "card_last_digits": payment.get('card_last_digits', ''),
+        "transaction_id": payment.get('transaction_id', ''),
+        "receipt_id": data.get('receipt_number', ''),
         "image_url": image_url or '',
-        "created_at": datetime.utcnow().isoformat()
-    }])
+        "notes": data.get('notes', ''),
+        "tags": data.get('receipt_category', ''),
+        # Store full items data as JSON for reference
+        "items": json.dumps(data.get('items', [])),
+        "created_at": datetime.utcnow().isoformat(),
+        "updated_at": datetime.utcnow().isoformat()
+    }
 
-    # Store items
+    db.write("app_receipts", [receipt_record])
+
+    # Store detailed items in separate table
     items = data.get('items', [])
     if items:
         item_records = []
-        for item in items:
-            item_records.append({
+        for idx, item in enumerate(items):
+            item_record = {
                 "id": str(uuid.uuid4()),
                 "receipt_id": entry_id,
-                "name": item.get('name', 'Item'),
-                "price": item.get('price', 0),
+                "name": item.get('name', f'Item {idx+1}'),
+                "sku": item.get('sku', ''),
                 "quantity": item.get('quantity', 1),
-                "created_at": datetime.utcnow().isoformat()
-            })
-        db.write("app_receipt_items", item_records)
+                "unit_price": item.get('unit_price', item.get('price', 0)),
+                "total_price": item.get('total_price',
+                              item.get('quantity', 1) * item.get('unit_price', item.get('price', 0))),
+                "discount": item.get('discount', 0),
+                "category": item.get('category', 'Other'),
+                "department": item.get('department', ''),
+                "is_taxable": item.get('is_taxable', True),
+                "created_at": datetime.utcnow().isoformat(),
+                "updated_at": datetime.utcnow().isoformat()
+            }
+            item_records.append(item_record)
+
+        if item_records:
+            db.write("app_receipt_items", item_records)
+
+    logger.info(f"Stored receipt {entry_id} with {len(items)} items for user {user_id}")
