@@ -322,13 +322,37 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
             category = result.get('category', 'food')
             data = result.get('data', {})
             
-            # Store result based on category
-            if category == 'food':
-                _store_food_result(db, user_id, entry_id, data, image_url, description)
-            elif category == 'receipt':
-                _store_receipt_result(db, user_id, entry_id, data, image_url)
-            
-            # Update pending_analyses status
+            # Store result based on category with error handling
+            storage_success = False
+            try:
+                if category == 'food':
+                    storage_success = _store_food_result(db, user_id, entry_id, data, image_url, description)
+                elif category == 'receipt':
+                    _store_receipt_result(db, user_id, entry_id, data, image_url)
+                    storage_success = True  # Assume success for receipt (add similar error handling later)
+
+                if not storage_success:
+                    raise Exception(f"Failed to store {category} result for entry {entry_id}")
+
+            except Exception as storage_error:
+                logger.error(f"Failed to store analysis result for {entry_id}: {str(storage_error)}")
+                # Update status to error
+                db.update("app_pending_analyses",
+                         filters=[
+                             {"field": "id", "operator": "eq", "value": entry_id},
+                             {"field": "user_id", "operator": "eq", "value": user_id}
+                         ],
+                         updates={
+                             "status": "storage_failed",
+                             "error": f"Storage failed: {str(storage_error)}",
+                             "category": category,
+                             "failed_at": datetime.utcnow().isoformat(),
+                             "updated_at": datetime.utcnow().isoformat()
+                         })
+                # Don't continue to mark as completed if storage failed
+                return {"statusCode": 500, "body": json.dumps({"success": False, "error": f"Storage failed: {str(storage_error)}"})}
+
+            # Update pending_analyses status - only if storage succeeded
             logger.info(f"Updating status for entry_id={entry_id}, user_id={user_id}")
             logger.info(f"Using tenant={final_tenant_id}, namespace={final_namespace}")
 
@@ -409,55 +433,113 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
 
 
 def _store_food_result(db, user_id: str, entry_id: str, data: Dict, image_url: str, description: Optional[str] = None):
-    """Store food analysis result"""
-    food_items = data.get('food_items', [])
+    """Store food analysis result with proper error handling"""
+    try:
+        food_items = data.get('food_items', [])
 
-    # Calculate totals from food_items
-    total_calories = 0
-    total_protein = 0
-    total_carbohydrates = 0
-    total_fats = 0
-    total_fiber = 0
-    total_sodium = 0
+        logger.info(f"Storing food result for entry {entry_id}, user {user_id}")
+        logger.info(f"Food items to store: {json.dumps(food_items)}")
 
-    for item in food_items:
-        quantity = item.get('quantity', 1)
-        total_calories += (item.get('calories', 0) * quantity)
-        # Check both singular and plural field names
-        total_protein += (item.get('protein', item.get('proteins', 0)) * quantity)
-        total_carbohydrates += (item.get('carbs', item.get('carbohydrates', 0)) * quantity)
-        total_fats += (item.get('fat', item.get('fats', 0)) * quantity)
-        total_fiber += (item.get('fiber', 0) * quantity)
-        total_sodium += (item.get('sodium', 0) * quantity)
+        # Calculate totals from food_items
+        total_calories = 0
+        total_protein = 0
+        total_carbohydrates = 0
+        total_fats = 0
+        total_fiber = 0
+        total_sodium = 0
 
-    # Use the original description if available, otherwise construct from food items
-    if description:
-        final_description = description
-    else:
-        # Fallback: create description from food items
-        if food_items:
-            food_names = [item.get('name', 'Food') for item in food_items[:3]]  # First 3 items
-            final_description = ', '.join(food_names)
+        for item in food_items:
+            quantity = item.get('quantity', 1)
+            total_calories += (item.get('calories', 0) * quantity)
+            # Check both singular and plural field names
+            total_protein += (item.get('protein', item.get('proteins', 0)) * quantity)
+            total_carbohydrates += (item.get('carbs', item.get('carbohydrates', 0)) * quantity)
+            total_fats += (item.get('fat', item.get('fats', 0)) * quantity)
+            total_fiber += (item.get('fiber', 0) * quantity)
+            total_sodium += (item.get('sodium', 0) * quantity)
+
+        # Use the original description if available, otherwise construct from food items
+        if description:
+            final_description = description
         else:
-            final_description = 'Food'
+            # Fallback: create description from food items
+            if food_items:
+                food_names = [item.get('name', 'Food') for item in food_items[:3]]  # First 3 items
+                final_description = ', '.join(food_names)
+            else:
+                final_description = 'Food'
 
-    db.write("app_food_entries_v2", [{
-        "id": entry_id,
-        "user_id": user_id,
-        "description": final_description,
-        "meal_type": data.get('meal_type', 'snack'),
-        "calories": total_calories,
-        "total_protein": total_protein,
-        "total_carbohydrates": total_carbohydrates,
-        "total_fats": total_fats,
-        "total_fiber": total_fiber,
-        "total_sodium": total_sodium,
-        "image_url": image_url or '',
-        "extracted_nutrients": json.dumps(data),
-        "analysis_status": "completed",  # Mark as completed
-        "created_at": datetime.utcnow().isoformat(),
-        "updated_at": datetime.utcnow().isoformat()
-    }])
+        # Prepare the food entry record
+        food_entry = {
+            "id": entry_id,
+            "user_id": user_id,
+            "description": final_description,
+            "meal_type": data.get('meal_type', 'snack'),
+            "calories": total_calories,
+            "total_protein": total_protein,
+            "total_carbohydrates": total_carbohydrates,
+            "total_fats": total_fats,
+            "total_fiber": total_fiber,
+            "total_sodium": total_sodium,
+            "image_url": image_url or '',
+            "extracted_nutrients": json.dumps(data),
+            "analysis_status": "completed",  # Mark as completed
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat()
+        }
+
+        logger.info(f"Attempting to write food entry: {json.dumps(food_entry)}")
+
+        # Write to database with error handling
+        result = db.write("app_food_entries_v2", [food_entry])
+
+        if result.get('success'):
+            logger.info(f"✅ Successfully stored food entry {entry_id} for user {user_id}")
+
+            # Verify the write was successful by querying back
+            verify_result = db.query("app_food_entries_v2",
+                                    filters=[
+                                        {"field": "id", "operator": "eq", "value": entry_id}
+                                    ],
+                                    limit=1)
+
+            if verify_result.get('success') and verify_result.get('data', {}).get('records'):
+                logger.info(f"✅ Verified: Food entry {entry_id} exists in database")
+            else:
+                logger.error(f"⚠️ Warning: Food entry {entry_id} not found after write - may have failed silently")
+                # Try to write again using a different approach
+                logger.info(f"Attempting retry with upsert for entry {entry_id}")
+                retry_result = db.upsert("app_food_entries_v2", [food_entry], conflict_fields=["id"])
+                if retry_result.get('success'):
+                    logger.info(f"✅ Retry successful: Food entry {entry_id} stored on second attempt")
+                else:
+                    logger.error(f"❌ Retry failed: {retry_result.get('error')}")
+                    raise Exception(f"Failed to store food entry after retry: {retry_result.get('error')}")
+
+            return True
+        else:
+            error_msg = result.get('error', 'Unknown error during write')
+            logger.error(f"❌ Failed to store food entry {entry_id}: {error_msg}")
+
+            # Try upsert as fallback
+            logger.info(f"Attempting upsert as fallback for entry {entry_id}")
+            upsert_result = db.upsert("app_food_entries_v2", [food_entry], conflict_fields=["id"])
+
+            if upsert_result.get('success'):
+                logger.info(f"✅ Upsert successful: Food entry {entry_id} stored via fallback")
+                return True
+            else:
+                logger.error(f"❌ Upsert also failed: {upsert_result.get('error')}")
+                raise Exception(f"Failed to store food entry: {error_msg}")
+
+    except Exception as e:
+        logger.error(f"❌ Critical error in _store_food_result for entry {entry_id}: {str(e)}", exc_info=True)
+
+        # Log full details for debugging
+        logger.error(f"Failed entry details - user_id: {user_id}, data: {json.dumps(data)}")
+
+        # Don't let this fail silently - raise the error
+        raise
 
 
 def _store_receipt_result(db, user_id: str, entry_id: str, data: Dict, image_url: str):
