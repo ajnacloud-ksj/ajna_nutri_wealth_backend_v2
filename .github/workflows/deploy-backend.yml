@@ -11,16 +11,58 @@ permissions:
 
 jobs:
   build-and-push:
-    uses: ajnacloud-ksj/ajna-github-workflows/.github/workflows/reusable-docker-ecr.yml@main
-    with:
-      aws-region: ap-south-1
-      ecr-repository: nutriwealth-backend
-      role-to-assume: arn:aws:iam::808527335982:role/GitHubActions-Deploy-Role
-      image-tag: ${{ github.sha }}
-      # Don't specify platform - let it build for native architecture (x86_64)
-      # This ensures Docker V2 format which Lambda requires
-      # platform: linux/amd64  # Removed to avoid OCI format issues
-    secrets: inherit
+    runs-on: ubuntu-latest
+    outputs:
+      image-uri: ${{ steps.build.outputs.image-uri }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::808527335982:role/GitHubActions-Deploy-Role
+          aws-region: ap-south-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up QEMU for ARM64
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image for ARM64 Lambda
+        id: build
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: nutriwealth-backend
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          # Build ARM64 image using buildx with docker output (not OCI)
+          # This ensures Lambda-compatible Docker V2 format
+          docker buildx build \
+            --platform linux/arm64 \
+            --output type=docker \
+            --no-cache \
+            --pull \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            .
+
+          # Tag as latest
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+          # Push both tags (these will be in Docker V2 format)
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+          # Output the image URI for the next job
+          echo "image-uri=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
   deploy-lambda:
     needs: build-and-push
