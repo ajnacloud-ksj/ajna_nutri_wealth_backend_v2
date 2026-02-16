@@ -17,7 +17,9 @@ jobs:
       ecr-repository: nutriwealth-backend
       role-to-assume: arn:aws:iam::808527335982:role/GitHubActions-Deploy-Role
       image-tag: ${{ github.sha }}
-      platform: linux/arm64
+      # Don't specify platform - let it build for native architecture (x86_64)
+      # This ensures Docker V2 format which Lambda requires
+      # platform: linux/amd64  # Removed to avoid OCI format issues
     secrets: inherit
 
   deploy-lambda:
