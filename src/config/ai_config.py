@@ -260,7 +260,7 @@ class AIConfig:
                 AIProvider.OLLAMA: "mixtral:8x7b",
             },
             "receipt": {
-                AIProvider.OPENAI: os.environ.get("RECEIPT_MODEL_OPENAI", "gpt-4o-mini"),
+                AIProvider.OPENAI: os.environ.get("RECEIPT_MODEL_OPENAI", "gpt-4o"),  # Upgraded from gpt-4o-mini for better reliability
                 AIProvider.GROQ: os.environ.get("RECEIPT_MODEL_GROQ", "llama-3.2-90b-vision"),
                 AIProvider.ANTHROPIC: "claude-3-5-sonnet",
                 AIProvider.OLLAMA: "llama3.2",

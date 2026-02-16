@@ -386,21 +386,74 @@ Return ONLY a JSON object with:
 
             # Call API for detailed analysis
             logger.debug(f"Starting detailed analysis with model: {config.model_name} (Provider: {config.provider})")
-            
+
+            # Use structured outputs for receipts with gpt-4o models
+            response_format = {"type": "json_object"}  # Default
+            if category == "receipt" and config.provider == "openai" and "gpt-4o" in config.model_name:
+                try:
+                    from schemas.receipt_schema import RECEIPT_RESPONSE_SCHEMA
+                    response_format = {
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "receipt_extraction",
+                            "strict": True,
+                            "schema": RECEIPT_RESPONSE_SCHEMA
+                        }
+                    }
+                    logger.info(f"Using structured outputs with schema for receipt analysis")
+                except ImportError:
+                    logger.warning("Could not import receipt schema, falling back to simple JSON mode")
+
             completion = client.chat.completions.create(
                 model=config.model_name,
                 messages=messages,
                 temperature=config.temperature,
                 max_tokens=config.max_tokens,
-                response_format={"type": "json_object"}
+                response_format=response_format
             )
 
             analysis_text = completion.choices[0].message.content
             analysis_tokens = completion.usage.total_tokens
             total_tokens += analysis_tokens
 
-            # Parse result
-            analysis_result = json.loads(analysis_text)
+            # Parse result with retry logic for receipts
+            try:
+                analysis_result = json.loads(analysis_text)
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON parse error for {category}: {str(e)}")
+                logger.error(f"Raw response (first 500 chars): {analysis_text[:500]}")
+
+                # Retry once for receipts with a more explicit prompt
+                if category == "receipt":
+                    logger.info("Retrying receipt analysis with explicit JSON instructions")
+                    retry_messages = messages + [
+                        {"role": "assistant", "content": analysis_text},
+                        {"role": "user", "content": "The response was not valid JSON. Please provide a valid JSON response matching the exact structure requested. Ensure all JSON syntax is correct."}
+                    ]
+
+                    retry_completion = client.chat.completions.create(
+                        model=config.model_name,
+                        messages=retry_messages,
+                        temperature=0,  # Use zero temperature for retry
+                        max_tokens=config.max_tokens,
+                        response_format=response_format
+                    )
+
+                    retry_text = retry_completion.choices[0].message.content
+                    total_tokens += retry_completion.usage.total_tokens
+
+                    try:
+                        analysis_result = json.loads(retry_text)
+                        logger.info("Retry successful - valid JSON received")
+                    except json.JSONDecodeError as retry_error:
+                        logger.error(f"Retry also failed: {str(retry_error)}")
+                        # Return a minimal valid structure
+                        analysis_result = {
+                            "error": "Failed to parse receipt",
+                            "raw_response_sample": analysis_text[:1000]
+                        }
+                else:
+                    raise
 
             # Calculate analysis cost
             analysis_cost = (analysis_tokens / 1000) * config.cost_per_1k_tokens
