@@ -54,6 +54,38 @@ except Exception as e:
     db = None
     raise
 
+# Auto-initialize essential tables on cold start
+def _ensure_tables_exist(client, schemas):
+    """Create essential tables if they don't exist (idempotent, runs on cold start)."""
+    essential_tables = [
+        'users_v4', 'pending_analyses', 'food_entries_v2', 'food_items',
+        'receipts', 'receipt_items', 'workouts', 'workout_exercises',
+        'images', 'user_goals', 'meal_summaries', 'health_assessments',
+        'api_costs', 'shopping_lists', 'shopping_list_items',
+    ]
+    for table_name in essential_tables:
+        schema = schemas.get(table_name)
+        if not schema:
+            continue
+        full_name = f"app_{table_name}"
+        try:
+            result = client.create_table(table=full_name, schema=schema, if_not_exists=True)
+            if result.get('success'):
+                logger.debug(f"Table ensured: {full_name}")
+            else:
+                error = result.get('error', '')
+                if 'already exists' not in str(error).lower():
+                    logger.warning(f"Table create issue {full_name}: {error}")
+        except Exception as e:
+            logger.warning(f"Could not ensure table {full_name}: {e}")
+
+if db:
+    try:
+        _ensure_tables_exist(db, SCHEMAS)
+        logger.info("Essential tables verified")
+    except Exception as e:
+        logger.warning(f"Table auto-init had errors (non-fatal): {e}")
+
 # Initialize AI service (always use optimized version)
 try:
     if db:
