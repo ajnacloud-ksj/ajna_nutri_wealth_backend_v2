@@ -37,7 +37,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
 # Import the Lambda handler
-from app_optimized import lambda_handler as handler
+from app import lambda_handler as handler
 
 # Create FastAPI app
 app = FastAPI(title="NutriWealth Backend API")
