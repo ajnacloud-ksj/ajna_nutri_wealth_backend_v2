@@ -19,11 +19,14 @@ from lib.logger import logger
 # Transfer matching patterns
 TRANSFER_PATTERNS = [
     # BofA → Apple Card
-    {"from_keywords": ["APPLECARD GSBANK"], "to_account": "Apple Card", "to_keywords": ["Payment"]},
+    {"from_keywords": ["APPLECARD GSBANK"], "to_account": "Apple Card", "to_keywords": ["PAYMENT"]},
     # BofA → Chase
     {"from_keywords": ["CHASE CREDIT CRD"], "to_account": "Chase Sapphire", "to_keywords": ["PAYMENT THANK YOU"]},
     # BofA → Discover
     {"from_keywords": ["DISCOVER"], "to_account": "Discover", "to_keywords": ["PAYMENT", "INTERNET PAYMENT"]},
+    # BofA ↔ SoFi
+    {"from_keywords": ["SOFI BANK", "BANK OF AMERICA"], "to_account": "BofA Checking", "to_keywords": ["SOFI BANK", "TRANSFER"]},
+    {"from_keywords": ["BANK OF AMERICA"], "to_account": "SoFi Savings", "to_keywords": ["BANK OF AMERICA", "TRANSFER"]},
 ]
 
 
@@ -236,19 +239,19 @@ def _detect_double_counts(db, user_id: str, transfer_ids: set) -> List[Dict[str,
             if amount_diff > 0.01:
                 continue
 
-            # Check merchant similarity
-            confidence = 0.5  # Base confidence for date + amount match
+            # Require merchant similarity for double-count detection
+            # Without merchant match, same-amount transactions across accounts are just coincidence
+            confidence = 0.0
 
             if card_merchant and bank_merchant:
-                # Simple merchant name matching
                 if card_merchant == bank_merchant:
-                    confidence = 0.9
+                    confidence = 0.95
                 elif card_merchant in bank_merchant or bank_merchant in card_merchant:
-                    confidence = 0.8
+                    confidence = 0.85
                 elif any(word in bank_merchant for word in card_merchant.split() if len(word) > 3):
-                    confidence = 0.7
+                    confidence = 0.75
 
-            if confidence >= 0.5:
+            if confidence >= 0.7:
                 double_counts.append({
                     "credit_card_transaction": {
                         "id": card_id,
@@ -289,7 +292,6 @@ def _match_receipts(db, user_id: str) -> Tuple[List[Dict[str, Any]], List[Dict[s
             id, store_name, total_amount, receipt_date, image_url, created_at
         FROM app_receipts
         WHERE user_id = '{user_id}'
-          AND _deleted = false
         ORDER BY receipt_date DESC
     """
 
