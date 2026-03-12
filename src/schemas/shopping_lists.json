@@ -1,0 +1,40 @@
+{
+    "fields": {
+        "id": {
+            "type": "string",
+            "required": true
+        },
+        "user_id": {
+            "type": "string",
+            "required": true
+        },
+        "name": {
+            "type": "string",
+            "required": true
+        },
+        "status": {
+            "type": "string",
+            "required": false
+        },
+        "item_count": {
+            "type": "integer",
+            "required": false
+        },
+        "estimated_total": {
+            "type": "double",
+            "required": false
+        },
+        "notes": {
+            "type": "string",
+            "required": false
+        },
+        "created_at": {
+            "type": "timestamp",
+            "required": false
+        },
+        "updated_at": {
+            "type": "timestamp",
+            "required": false
+        }
+    }
+}

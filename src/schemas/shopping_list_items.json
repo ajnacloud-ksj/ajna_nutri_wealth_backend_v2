@@ -1,0 +1,68 @@
+{
+    "fields": {
+        "id": {
+            "type": "string",
+            "required": true
+        },
+        "list_id": {
+            "type": "string",
+            "required": true
+        },
+        "user_id": {
+            "type": "string",
+            "required": true
+        },
+        "name": {
+            "type": "string",
+            "required": true
+        },
+        "quantity": {
+            "type": "double",
+            "required": false
+        },
+        "unit": {
+            "type": "string",
+            "required": false
+        },
+        "category": {
+            "type": "string",
+            "required": false
+        },
+        "estimated_price": {
+            "type": "double",
+            "required": false
+        },
+        "actual_price": {
+            "type": "double",
+            "required": false
+        },
+        "store_recommendation": {
+            "type": "string",
+            "required": false
+        },
+        "is_purchased": {
+            "type": "boolean",
+            "required": false
+        },
+        "priority": {
+            "type": "string",
+            "required": false
+        },
+        "notes": {
+            "type": "string",
+            "required": false
+        },
+        "added_via": {
+            "type": "string",
+            "required": false
+        },
+        "created_at": {
+            "type": "timestamp",
+            "required": false
+        },
+        "updated_at": {
+            "type": "timestamp",
+            "required": false
+        }
+    }
+}

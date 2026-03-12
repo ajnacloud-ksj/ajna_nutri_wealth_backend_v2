@@ -1,0 +1,13 @@
+{
+    "fields": {
+        "id": {"type": "string", "required": true},
+        "receipt_item_id": {"type": "string", "required": true},
+        "item_name": {"type": "string", "required": true},
+        "category": {"type": "string", "required": false},
+        "unit_price": {"type": "double", "required": false},
+        "store_name": {"type": "string", "required": false},
+        "embedding": {"type": "string", "required": true},
+        "embedding_model": {"type": "string", "required": false},
+        "created_at": {"type": "timestamp", "required": false}
+    }
+}
