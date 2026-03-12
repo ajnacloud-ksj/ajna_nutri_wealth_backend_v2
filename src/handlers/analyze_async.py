@@ -169,6 +169,19 @@ def get_analysis_status(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         elif status == 'failed':
             response['error'] = record.get('error_message') or record.get('error')
 
+        # Resolve S3 image keys to presigned URLs in result
+        if response.get('result') and response['result'].get('image_url', '').startswith('uploads/'):
+            try:
+                s3 = boto3.client('s3', region_name=os.environ.get('AWS_REGION', 'ap-south-1'))
+                bucket = os.environ.get('S3_BUCKET', 'nutriwealth-uploads')
+                response['result']['image_url'] = s3.generate_presigned_url(
+                    'get_object',
+                    Params={'Bucket': bucket, 'Key': response['result']['image_url']},
+                    ExpiresIn=3600
+                )
+            except Exception:
+                pass
+
         logger.info(f"Query result - status: {status}")
         return respond(200, response)
 

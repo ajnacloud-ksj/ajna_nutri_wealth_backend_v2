@@ -9,11 +9,38 @@ from datetime import datetime
 import uuid
 from typing import Dict, Any, Optional, List
 
+import boto3
 from lib.auth_provider import require_auth, get_user_id
 from lib.validators import validate_request, ValidationError
 from lib.logger import logger, log_handler
 from utils.http import respond
 from utils.nutrition_calculator import enrich_food_entries
+
+# S3 client for resolving image URLs (reused across invocations)
+_s3_client = None
+
+def _get_s3_client():
+    global _s3_client
+    if _s3_client is None:
+        _s3_client = boto3.client('s3', region_name=os.environ.get('AWS_REGION', 'ap-south-1'))
+    return _s3_client
+
+def resolve_image_urls(records: list) -> list:
+    """Resolve S3 keys in image_url fields to presigned download URLs."""
+    bucket = os.environ.get('S3_BUCKET', 'nutriwealth-uploads')
+    s3 = _get_s3_client()
+    for record in records:
+        image_url = record.get('image_url')
+        if image_url and isinstance(image_url, str) and image_url.startswith('uploads/'):
+            try:
+                record['image_url'] = s3.generate_presigned_url(
+                    'get_object',
+                    Params={'Bucket': bucket, 'Key': image_url},
+                    ExpiresIn=3600
+                )
+            except Exception:
+                pass  # Keep original key if presigning fails
+    return records
 
 
 # Table configuration
@@ -129,6 +156,10 @@ def list_data(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
             # Compute nutrition totals on the fly for food_entries
             if table_name == 'food_entries':
                 cleaned_records = enrich_food_entries(cleaned_records)
+
+            # Resolve S3 keys to presigned URLs for tables with images
+            if table_name in ('food_entries', 'receipts', 'workouts'):
+                cleaned_records = resolve_image_urls(cleaned_records)
 
             logger.info(
                 f"Retrieved {len(cleaned_records)} records from {table_name}",
@@ -289,6 +320,10 @@ def get_data_by_id(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, 
             record = records[0]
             cleaned = {k: v for k, v in record.items() if not k.startswith('_')}
             cleaned = sanitize_json_response(cleaned)
+
+            # Resolve S3 keys to presigned URLs
+            if table_name in ('food_entries', 'receipts', 'workouts'):
+                resolve_image_urls([cleaned])
 
             return respond(200, cleaned, event=event)
         else:
