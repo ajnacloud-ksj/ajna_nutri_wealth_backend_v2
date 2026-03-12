@@ -109,41 +109,34 @@ def get_analysis_status(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             return respond(401, {"error": "Unauthorized"})
 
         db = context.get('db')
-        
+
+        # Validate UUIDs to prevent SQL injection in execute_sql
+        try:
+            uuid.UUID(entry_id)
+            uuid.UUID(user_id)
+        except ValueError:
+            return respond(400, {"error": "Invalid ID format"})
+
         logger.info(f"Checking status for entry_id: {entry_id}, user_id: {user_id}")
 
-        # Query pending_analyses for the record
-        result = db.query("app_pending_analyses",
-                         filters=[
-                             {"field": "id", "operator": "eq", "value": entry_id},
-                             {"field": "user_id", "operator": "eq", "value": user_id}
-                         ],
-                         limit=1,
-                         use_cache=False)
+        # Use execute_sql for consistent reads — db.query() uses cached Parquet metadata
+        # which misses recently written data. execute_sql goes through DuckDB's Iceberg
+        # extension which reads all data files including new ones.
+        # IbexDB updates create new version rows (append-only), so ORDER BY updated_at DESC
+        # and LIMIT 1 gets the latest version.
+        sql = (
+            "SELECT id, user_id, status, category, error, created_at, updated_at "
+            "FROM app_pending_analyses "
+            f"WHERE id = '{entry_id}' AND user_id = '{user_id}' "
+            "ORDER BY updated_at DESC LIMIT 1"
+        )
+        result = db.execute_sql(sql)
 
         if not result.get('success') or not result.get('data', {}).get('records'):
             return respond(404, {"error": "Analysis not found"})
 
         record = result['data']['records'][0]
         status = record.get('status', 'pending')
-
-        # IbexDB update operations may not reflect immediately in queries.
-        # If status is still "pending", check the result tables directly.
-        if status == 'pending':
-            for table, category in [
-                ("app_food_entries_v2", "food"),
-                ("app_receipts", "receipt"),
-                ("app_workouts", "workout")
-            ]:
-                check = db.query(table,
-                                filters=[{"field": "id", "operator": "eq", "value": entry_id}],
-                                limit=1, use_cache=False)
-                logger.info(f"Result table check: {table} -> success={check.get('success')}, records={len(check.get('data', {}).get('records', []))}")
-                if check.get('success') and check.get('data', {}).get('records'):
-                    status = "completed"
-                    record['category'] = category
-                    logger.info(f"Found completed result in {table}")
-                    break
 
         response = {
             "id": entry_id,
@@ -156,23 +149,27 @@ def get_analysis_status(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             category = record.get('category', 'food')
             response['category'] = category
 
+            # Fetch result data using execute_sql for consistency
             if category == 'food':
-                food_result = db.query("app_food_entries_v2",
-                                      filters=[{"field": "id", "operator": "eq", "value": entry_id}],
-                                      limit=1)
+                food_sql = f"SELECT * FROM app_food_entries_v2 WHERE id = '{entry_id}' LIMIT 1"
+                food_result = db.execute_sql(food_sql)
                 if food_result.get('success') and food_result.get('data', {}).get('records'):
                     response['result'] = food_result['data']['records'][0]
             elif category == 'receipt':
-                receipt_result = db.query("app_receipts",
-                                        filters=[{"field": "id", "operator": "eq", "value": entry_id}],
-                                        limit=1)
+                receipt_sql = f"SELECT * FROM app_receipts WHERE id = '{entry_id}' LIMIT 1"
+                receipt_result = db.execute_sql(receipt_sql)
                 if receipt_result.get('success') and receipt_result.get('data', {}).get('records'):
                     response['result'] = receipt_result['data']['records'][0]
+            elif category == 'workout':
+                workout_sql = f"SELECT * FROM app_workouts WHERE id = '{entry_id}' LIMIT 1"
+                workout_result = db.execute_sql(workout_sql)
+                if workout_result.get('success') and workout_result.get('data', {}).get('records'):
+                    response['result'] = workout_result['data']['records'][0]
 
         elif status == 'failed':
             response['error'] = record.get('error')
 
-        logger.info(f"Query result - found: True, status: {status}")
+        logger.info(f"Query result - status: {status}")
         return respond(200, response)
 
     except Exception as e:
