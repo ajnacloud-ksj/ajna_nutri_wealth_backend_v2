@@ -61,7 +61,7 @@ def _ensure_tables_exist(client, schemas):
         'users_v4', 'pending_analyses', 'food_entries_v2', 'food_items',
         'receipts', 'receipt_items', 'workouts', 'workout_exercises',
         'images', 'user_goals', 'meal_summaries', 'health_assessments',
-        'api_costs', 'shopping_lists', 'shopping_list_items',
+        'api_costs', 'shopping_lists', 'shopping_list_items', 'receipt_item_embeddings',
     ]
     for table_name in essential_tables:
         schema = schemas.get(table_name)

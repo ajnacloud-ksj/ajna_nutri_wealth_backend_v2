@@ -434,7 +434,9 @@ def _store_receipt(
         # Extract receipt data
         merchant = ai_data.get('merchant_name', 'Unknown Vendor')
         date_str = ai_data.get('purchase_date') or datetime.utcnow().strftime('%Y-%m-%d')
-        total = ai_data.get('total_amount', 0.0)
+        financial = ai_data.get('financial_summary', {})
+        total = financial.get('total_amount') or ai_data.get('total_amount', 0.0) or 0.0
+        currency = financial.get('currency') or ai_data.get('currency', 'USD')
 
         # Create receipt record with S3 URL instead of base64
         receipt_record = {
@@ -443,9 +445,13 @@ def _store_receipt(
             'vendor': merchant,
             'receipt_date': date_str,
             'total_amount': total,
-            'currency': ai_data.get('currency', 'USD'),
+            'subtotal': financial.get('subtotal', 0.0) or 0.0,
+            'tax_amount': financial.get('tax_amount', 0.0) or 0.0,
+            'discount_amount': financial.get('discount_amount', 0.0) or 0.0,
+            'currency': currency,
             'category': ai_data.get('category', 'General'),
-            'image_url': s3_image_url or '',  # Store S3 URL, not base64
+            'receipt_number': ai_data.get('receipt_number', ''),
+            'image_url': s3_image_url or '',
             'image_storage_type': 's3' if s3_image_url else 'none',
             'created_at': datetime.utcnow().isoformat(),
             'updated_at': datetime.utcnow().isoformat()
@@ -459,13 +465,17 @@ def _store_receipt(
         if items:
             item_records = []
             for item in items:
+                unit_price = item.get('unit_price', item.get('price', 0.0)) or 0.0
+                quantity = item.get('quantity', 1.0) or 1.0
+                total_price = item.get('total_price') or (unit_price * quantity)
                 item_records.append({
                     'id': str(uuid.uuid4()),
                     'receipt_id': entry_id,
                     'name': item.get('name', 'Unknown Item'),
-                    'price': item.get('price', 0.0),
-                    'quantity': item.get('quantity', 1.0),
-                    'category': item.get('category'),
+                    'unit_price': unit_price,
+                    'total_price': total_price,
+                    'quantity': quantity,
+                    'category': item.get('category', ''),
                     'created_at': datetime.utcnow().isoformat()
                 })
             db.write('app_receipt_items', item_records)
@@ -484,7 +494,7 @@ def _store_receipt(
                         'receipt_item_id': item_rec['id'],
                         'item_name': item_rec['name'],
                         'category': item_rec.get('category', ''),
-                        'unit_price': item_rec.get('price', 0),
+                        'unit_price': item_rec.get('unit_price', 0),
                         'store_name': merchant,
                         'embedding': json.dumps(emb),
                         'embedding_model': 'text-embedding-3-small',
@@ -494,7 +504,7 @@ def _store_receipt(
                         'receipt_item_id': item_rec['id'],
                         'item_name': item_rec['name'],
                         'category': item_rec.get('category', ''),
-                        'unit_price': item_rec.get('price', 0),
+                        'unit_price': item_rec.get('unit_price', 0),
                         'store_name': merchant,
                         'embedding': emb,
                     })
