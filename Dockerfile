@@ -1,16 +1,17 @@
 FROM public.ecr.aws/lambda/python:3.12
 
-# Install uv for faster dependency installation
+# Install uv for fast Python package management
 RUN pip install uv
 
-# Copy dependency files
-COPY pyproject.toml ${LAMBDA_TASK_ROOT}
-COPY src/requirements.txt ${LAMBDA_TASK_ROOT}
+# Install ajna-cloud SDK from GitHub Release wheel
+ARG SDK_VERSION=v0.2.2.0.12
+RUN uv pip install --system --no-cache "https://github.com/ajnacloud-ksj/ajna-cloud-sdk/releases/download/${SDK_VERSION}/ajna_cloud-0.2.2.0-py3-none-any.whl"
 
-# Install dependencies using uv (faster than pip)
-RUN uv pip install --system -r ${LAMBDA_TASK_ROOT}/requirements.txt
+# Copy and install remaining dependencies
+COPY src/requirements.txt ${LAMBDA_TASK_ROOT}/
+RUN uv pip install --system --no-cache -r ${LAMBDA_TASK_ROOT}/requirements.txt
 
-# Copy ALL source code - ensure nothing is missing
+# Copy ALL source code
 COPY src/ ${LAMBDA_TASK_ROOT}/src/
 
 # Copy app.py to root for Lambda entry point
