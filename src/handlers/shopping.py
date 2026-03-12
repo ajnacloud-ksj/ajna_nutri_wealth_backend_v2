@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any
 
 from utils.http import respond, get_user_id
+from lib.auth_provider import require_auth
 from lib.logger import logger
 from lib.model_manager import get_model_manager
 from lib.embeddings import get_embeddings_batch, find_similar, find_similar_multi, zvec_load_from_ibexdb, ZVEC_AVAILABLE
@@ -99,6 +100,7 @@ def _get_ai_client():
     ), config
 
 
+@require_auth
 def create_list(event, context):
     """POST /v1/shopping-lists - Create a new shopping list"""
     db = context['db']
@@ -136,6 +138,7 @@ def create_list(event, context):
         return respond(500, {"error": str(e)})
 
 
+@require_auth
 def list_lists(event, context):
     """GET /v1/shopping-lists - List all shopping lists for user"""
     db = context['db']
@@ -157,6 +160,7 @@ def list_lists(event, context):
         return respond(500, {"error": str(e)})
 
 
+@require_auth
 def get_list(event, context):
     """GET /v1/shopping-lists/{id} - Get a shopping list with its items"""
     db = context['db']
@@ -199,6 +203,7 @@ def get_list(event, context):
         return respond(500, {"error": str(e)})
 
 
+@require_auth
 def update_list(event, context):
     """PUT /v1/shopping-lists/{id} - Update a shopping list"""
     db = context['db']
@@ -239,6 +244,7 @@ def update_list(event, context):
         return respond(500, {"error": str(e)})
 
 
+@require_auth
 def delete_list(event, context):
     """DELETE /v1/shopping-lists/{id} - Delete a shopping list and its items"""
     db = context['db']
@@ -270,6 +276,7 @@ def delete_list(event, context):
         return respond(500, {"error": str(e)})
 
 
+@require_auth
 def add_items(event, context):
     """
     POST /v1/shopping-lists/{id}/items - Add items to a shopping list
@@ -377,6 +384,7 @@ def add_items(event, context):
         return respond(500, {"error": str(e)})
 
 
+@require_auth
 def update_item(event, context):
     """PUT /v1/shopping-lists/{id}/items/{item_id} - Update a shopping list item"""
     db = context['db']
@@ -421,6 +429,7 @@ def update_item(event, context):
         return respond(500, {"error": str(e)})
 
 
+@require_auth
 def delete_item(event, context):
     """DELETE /v1/shopping-lists/{id}/items/{item_id} - Delete a shopping list item"""
     db = context['db']
@@ -448,6 +457,7 @@ def delete_item(event, context):
         return respond(500, {"error": str(e)})
 
 
+@require_auth
 def prepare_list(event, context):
     """
     POST /v1/shopping-lists/{id}/prepare - AI-powered list optimization

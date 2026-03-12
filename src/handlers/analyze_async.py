@@ -4,13 +4,14 @@ import uuid
 from datetime import datetime
 from typing import Dict, Any, Optional, Optional
 
-from src.lib.auth_provider import get_user_id
+from src.lib.auth_provider import get_user_id, require_auth
 from ajna_cloud import logger, respond
 from src.config.settings import settings
 from src.lib.ai_optimized import OptimizedAIService
 from src.lib.ibex_client_optimized import OptimizedIbexClient as IbexClient
 import boto3
 
+@require_auth
 def submit_analysis(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     POST /v1/analyze/async
@@ -105,15 +106,16 @@ def submit_analysis(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         return respond(500, {"error": str(e)})
 
 
+@require_auth
 def get_analysis_status(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    GET /v1/analyze/async/{id}
+    GET /v1/analyze/status/{entry_id}
     Get status of async analysis
     """
     try:
         path_params = event.get('pathParameters', {})
         entry_id = path_params.get('entry_id') or path_params.get('id')
-        
+
         if not entry_id:
             return respond(400, {"error": "Missing entry ID"})
 

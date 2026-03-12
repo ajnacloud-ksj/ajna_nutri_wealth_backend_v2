@@ -4,7 +4,10 @@ Receipt handlers - Fetch receipts with joined items
 
 import json
 from utils.http import respond, get_user_id
+from lib.auth_provider import require_auth
 
+
+@require_auth
 def get_receipt_with_items(event, context):
     """
     GET /v1/receipts/:id - Get receipt with all items
@@ -98,6 +101,7 @@ def _transform_receipt_image(db, receipt):
     return receipt
 
 
+@require_auth
 def list_receipts(event, context):
     """
     GET /v1/receipts - List all receipts for user

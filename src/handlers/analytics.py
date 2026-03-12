@@ -6,9 +6,11 @@ Leverages DuckDB's analytical engine for complex queries across Iceberg tables.
 from datetime import datetime, timedelta
 
 from utils.http import respond, get_user_id
+from lib.auth_provider import require_auth
 from lib.logger import logger
 
 
+@require_auth
 def dashboard_summary(event, context):
     """
     GET /v1/analytics/dashboard - Dashboard summary with cross-table stats
@@ -79,6 +81,7 @@ def dashboard_summary(event, context):
     return respond(200, result)
 
 
+@require_auth
 def spending_by_vendor(event, context):
     """
     GET /v1/analytics/spending/vendors - Spending breakdown by vendor
@@ -110,6 +113,7 @@ def spending_by_vendor(event, context):
         return respond(500, {"error": str(e)})
 
 
+@require_auth
 def spending_trend(event, context):
     """
     GET /v1/analytics/spending/trend - Weekly spending trend
@@ -140,6 +144,7 @@ def spending_trend(event, context):
         return respond(500, {"error": str(e)})
 
 
+@require_auth
 def nutrition_trend(event, context):
     """
     GET /v1/analytics/nutrition/trend - Daily nutrition trend

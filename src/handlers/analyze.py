@@ -465,9 +465,9 @@ def _store_receipt(
         if items:
             item_records = []
             for item in items:
-                unit_price = item.get('unit_price', item.get('price', 0.0)) or 0.0
-                quantity = item.get('quantity', 1.0) or 1.0
-                total_price = item.get('total_price') or (unit_price * quantity)
+                unit_price = float(item.get('unit_price') or item.get('price') or 0.0)
+                quantity = float(item.get('quantity') or 1.0)
+                total_price = float(item.get('total_price') or 0.0) or (unit_price * quantity) or 0.01
                 item_records.append({
                     'id': str(uuid.uuid4()),
                     'receipt_id': entry_id,
