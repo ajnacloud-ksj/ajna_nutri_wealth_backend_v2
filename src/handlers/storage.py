@@ -5,15 +5,17 @@ import base64
 import boto3
 from datetime import datetime
 from utils.http import respond, get_user_id
+from lib.auth_provider import require_auth
 from lib.logger import logger
 
 # Import table name resolution from data handler
 from .data import resolve_table_name
 
+@require_auth
 def get_upload_url_endpoint(event, context):
     """POST /storage/upload-url - Get a presigned upload URL for direct binary upload"""
     try:
-        # Get user ID from the request
+        # Get user ID from the request (claims injected by @require_auth)
         user_id = get_user_id(event)
         if not user_id:
             return respond(401, {"error": "Unauthorized"})
@@ -63,6 +65,7 @@ def get_upload_url_endpoint(event, context):
         return respond(500, {"error": str(e)})
 
 
+@require_auth
 def upload_file(event, context):
     """POST /storage/upload - Upload a file to storage"""
     db = context['db']
