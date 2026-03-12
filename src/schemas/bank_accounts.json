@@ -1,0 +1,48 @@
+{
+    "fields": {
+        "id": {
+            "type": "string",
+            "required": true
+        },
+        "user_id": {
+            "type": "string",
+            "required": true
+        },
+        "account_name": {
+            "type": "string",
+            "required": true
+        },
+        "account_type": {
+            "type": "string",
+            "required": false
+        },
+        "institution": {
+            "type": "string",
+            "required": false
+        },
+        "last_balance": {
+            "type": "double",
+            "required": false
+        },
+        "balance_as_of": {
+            "type": "string",
+            "required": false
+        },
+        "transaction_count": {
+            "type": "integer",
+            "required": false
+        },
+        "last_upload_at": {
+            "type": "timestamp",
+            "required": false
+        },
+        "created_at": {
+            "type": "timestamp",
+            "required": false
+        },
+        "updated_at": {
+            "type": "timestamp",
+            "required": false
+        }
+    }
+}

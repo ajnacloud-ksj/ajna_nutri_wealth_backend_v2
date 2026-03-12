@@ -25,7 +25,7 @@ def ensure_user_exists(user_id: str, user_claims: Dict[str, Any], db) -> bool:
     try:
         # Check if user already exists
         result = db.query(
-            "users_v4",
+            "app_users_v4",
             filters=[{"field": "id", "operator": "eq", "value": user_id}],
             limit=1,
             use_cache=False  # Always check fresh data
@@ -40,7 +40,7 @@ def ensure_user_exists(user_id: str, user_claims: Dict[str, Any], db) -> bool:
                 logger.info(f"User {user_id} exists, updating last seen")
 
                 db.update(
-                    "users_v4",
+                    "app_users_v4",
                     filters=[{"field": "id", "operator": "eq", "value": user_id}],
                     updates={
                         "last_usage_date": datetime.utcnow().isoformat(),
@@ -59,7 +59,7 @@ def ensure_user_exists(user_id: str, user_claims: Dict[str, Any], db) -> bool:
 
         # For first user in system, make them admin
         # Check if this is the first user
-        all_users_result = db.query("users_v4", limit=1)
+        all_users_result = db.query("app_users_v4", limit=1)
         if all_users_result and all_users_result.get('success'):
             existing_users = all_users_result.get('data', {}).get('records', [])
             if len(existing_users) == 0:
@@ -81,7 +81,7 @@ def ensure_user_exists(user_id: str, user_claims: Dict[str, Any], db) -> bool:
 
         logger.info(f"Creating new user: {email} with role: {role}")
 
-        write_result = db.write("users_v4", [user_data])
+        write_result = db.write("app_users_v4", [user_data])
 
         if write_result and write_result.get('success'):
             logger.info(f"Successfully created user {user_id} ({email})")
@@ -159,7 +159,7 @@ def get_user_role(user_id: str, db) -> Optional[str]:
     """
     try:
         result = db.query(
-            "users_v4",
+            "app_users_v4",
             filters=[{"field": "id", "operator": "eq", "value": user_id}],
             limit=1,
             use_cache=False

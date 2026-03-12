@@ -48,6 +48,8 @@ def setup_database(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, 
             'shopping_lists',
             'shopping_list_items',
             'receipt_item_embeddings',
+            'bank_transactions',
+            'bank_accounts',
         ]
 
         for table_name in essential_tables:

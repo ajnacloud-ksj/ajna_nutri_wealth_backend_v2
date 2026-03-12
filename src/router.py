@@ -16,6 +16,7 @@ from src.handlers import health  # Health check endpoints
 from src.handlers import database_admin  # Database setup and cleanup
 from src.handlers import shopping  # Shopping list management
 from src.handlers import analytics  # Cross-table analytics via EXECUTE_SQL
+from src.handlers import bank_statements  # Bank statement CSV upload & transactions
 # from src.handlers import user  # User profile management - COMMENTED OUT UNTIL DEPLOYED
 
 # Note: Using improved analyze handler with two-stage AI processing
@@ -53,6 +54,13 @@ ROUTES = [
     ('PUT', r'^/v1/shopping-lists/(?P<id>[a-zA-Z0-9-]+)/items/(?P<item_id>[a-zA-Z0-9-]+)$', shopping.update_item),
     ('DELETE', r'^/v1/shopping-lists/(?P<id>[a-zA-Z0-9-]+)/items/(?P<item_id>[a-zA-Z0-9-]+)$', shopping.delete_item),
     ('POST', r'^/v1/shopping-lists/(?P<id>[a-zA-Z0-9-]+)/prepare$', shopping.prepare_list),
+
+    # Bank Statements (before generic data routes)
+    ('POST', r'^/v1/bank-statements/upload$', bank_statements.upload_csv),
+    ('GET', r'^/v1/bank-statements/dashboard$', bank_statements.get_dashboard_data),
+    ('DELETE', r'^/v1/bank-statements/batch/(?P<batch_id>[a-zA-Z0-9-]+)$', bank_statements.delete_batch),
+    ('GET', r'^/v1/bank-transactions$', bank_statements.list_transactions),
+    ('GET', r'^/v1/bank-accounts$', bank_statements.list_accounts),
 
     # Analytics (cross-table insights via EXECUTE_SQL)
     ('GET', r'^/v1/analytics/dashboard$', analytics.dashboard_summary),

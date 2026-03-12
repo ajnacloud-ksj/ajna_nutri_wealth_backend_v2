@@ -1,0 +1,48 @@
+{
+    "fields": {
+        "id": {
+            "type": "string",
+            "required": true
+        },
+        "user_id": {
+            "type": "string",
+            "required": true
+        },
+        "date": {
+            "type": "string",
+            "required": true
+        },
+        "description": {
+            "type": "string",
+            "required": true
+        },
+        "merchant": {
+            "type": "string",
+            "required": false
+        },
+        "amount": {
+            "type": "double",
+            "required": true
+        },
+        "category": {
+            "type": "string",
+            "required": false
+        },
+        "transaction_type": {
+            "type": "string",
+            "required": false
+        },
+        "source_account": {
+            "type": "string",
+            "required": false
+        },
+        "upload_batch_id": {
+            "type": "string",
+            "required": false
+        },
+        "created_at": {
+            "type": "timestamp",
+            "required": false
+        }
+    }
+}
