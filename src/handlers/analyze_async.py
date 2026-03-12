@@ -391,16 +391,16 @@ def _store_food_result(db, user_id: str, entry_id: str, data: Dict, image_url: s
             total_fiber += (item.get('fiber', 0) * quantity)
             total_sodium += (item.get('sodium', 0) * quantity)
 
-        # Use the original description if available, otherwise construct from food items
-        if description:
+        # Always prefer AI-identified food names over user description
+        # User descriptions are often generic ("AI-analyzed content", empty, etc.)
+        GENERIC_DESCRIPTIONS = {'', 'ai-analyzed content', 'food', 'meal', 'snack', 'none'}
+        if food_items:
+            food_names = [item.get('name', 'Food') for item in food_items[:3]]
+            final_description = ', '.join(food_names)
+        elif description and description.strip().lower() not in GENERIC_DESCRIPTIONS:
             final_description = description
         else:
-            # Fallback: create description from food items
-            if food_items:
-                food_names = [item.get('name', 'Food') for item in food_items[:3]]  # First 3 items
-                final_description = ', '.join(food_names)
-            else:
-                final_description = 'Food'
+            final_description = 'Food'
 
         # Prepare the food entry record
         food_entry = {
