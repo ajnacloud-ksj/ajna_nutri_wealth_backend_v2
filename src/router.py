@@ -4,7 +4,7 @@ Modern API Router with Clean Handler Imports
 
 import re
 from typing import Dict, Any
-from src.utils.http import respond
+from ajna_cloud import respond
 
 # Import modernized handlers
 from src.handlers import data  # Now using modernized data handler
@@ -14,6 +14,8 @@ from src.handlers import analyze_async  # Async analysis with SQS
 from src.handlers import model_config  # Model configuration management
 from src.handlers import health  # Health check endpoints
 from src.handlers import database_admin  # Database setup and cleanup
+from src.handlers import shopping  # Shopping list management
+from src.handlers import analytics  # Cross-table analytics via EXECUTE_SQL
 # from src.handlers import user  # User profile management - COMMENTED OUT UNTIL DEPLOYED
 
 # Note: Using improved analyze handler with two-stage AI processing
@@ -40,6 +42,23 @@ ROUTES = [
     # Auth
     ('GET', r'^/v1/auth/config$', auth.get_config),
     ('POST', r'^/v1/auth/invitations/redeem$', auth.redeem_invitation),
+
+    # Shopping Lists (before generic data routes)
+    ('POST', r'^/v1/shopping-lists$', shopping.create_list),
+    ('GET', r'^/v1/shopping-lists$', shopping.list_lists),
+    ('GET', r'^/v1/shopping-lists/(?P<id>[a-zA-Z0-9-]+)$', shopping.get_list),
+    ('PUT', r'^/v1/shopping-lists/(?P<id>[a-zA-Z0-9-]+)$', shopping.update_list),
+    ('DELETE', r'^/v1/shopping-lists/(?P<id>[a-zA-Z0-9-]+)$', shopping.delete_list),
+    ('POST', r'^/v1/shopping-lists/(?P<id>[a-zA-Z0-9-]+)/items$', shopping.add_items),
+    ('PUT', r'^/v1/shopping-lists/(?P<id>[a-zA-Z0-9-]+)/items/(?P<item_id>[a-zA-Z0-9-]+)$', shopping.update_item),
+    ('DELETE', r'^/v1/shopping-lists/(?P<id>[a-zA-Z0-9-]+)/items/(?P<item_id>[a-zA-Z0-9-]+)$', shopping.delete_item),
+    ('POST', r'^/v1/shopping-lists/(?P<id>[a-zA-Z0-9-]+)/prepare$', shopping.prepare_list),
+
+    # Analytics (cross-table insights via EXECUTE_SQL)
+    ('GET', r'^/v1/analytics/dashboard$', analytics.dashboard_summary),
+    ('GET', r'^/v1/analytics/spending/vendors$', analytics.spending_by_vendor),
+    ('GET', r'^/v1/analytics/spending/trend$', analytics.spending_trend),
+    ('GET', r'^/v1/analytics/nutrition/trend$', analytics.nutrition_trend),
 
     # Receipts (before generic data routes)
     ('GET', r'^/v1/receipts/(?P<id>[a-zA-Z0-9-]+)$', receipts.get_receipt_with_items),
