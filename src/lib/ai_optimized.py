@@ -520,14 +520,16 @@ Return ONLY a JSON object with:
     ):
         """Log API usage and cost to database"""
         try:
+            import uuid
             log_entry = {
+                "id": str(uuid.uuid4()),
                 "user_id": user_id,
                 "function_name": "process_request_optimized",
                 "category": category,
                 "model_used": json.dumps(models_used),
                 "total_tokens": total_tokens,
                 "cost_usd": cost_usd,
-                "created_at": datetime.now(pytz.utc).isoformat()
+                "created_at": datetime.utcnow().isoformat()
             }
 
             self.db.write("app_api_costs", [log_entry])

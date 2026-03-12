@@ -10,6 +10,7 @@ requires-python = ">=3.10"
 license = {text = "MIT"}
 
 dependencies = [
+    "ajna-cloud>=0.2.2",
     "requests>=2.31.0",
     "boto3>=1.35.0",
     "openai>=1.54.3",
@@ -19,6 +20,7 @@ dependencies = [
     "PyJWT>=2.8.0",
     "cryptography>=41.0.0",
     "pydantic>=2.5.0",
+    "zvec>=0.2.0",
 ]
 
 [project.optional-dependencies]

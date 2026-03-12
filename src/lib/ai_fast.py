@@ -256,15 +256,16 @@ Be concise and accurate. If you cannot determine exact values, make reasonable e
     def _log_cost(self, user_id: str, function_name: str, category: str, tokens: int, cost: float):
         """Log the cost to database"""
         try:
+            import uuid
             cost_record = {
-                "id": None,  # Let DB generate
+                "id": str(uuid.uuid4()),
                 "user_id": user_id,
                 "function_name": function_name,
                 "category": category,
                 "model_used": self.default_model,
                 "total_tokens": tokens,
                 "cost_usd": cost,
-                "created_at": datetime.now(pytz.utc).isoformat()
+                "created_at": datetime.utcnow().isoformat()
             }
 
             self.db.write("app_api_costs", [cost_record])

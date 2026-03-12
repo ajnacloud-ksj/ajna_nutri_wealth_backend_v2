@@ -8,8 +8,7 @@ from datetime import datetime
 from typing import Dict, Any
 
 from src.lib.auth_provider_enhanced import require_admin_role
-from src.lib.logger import logger, log_handler
-from src.utils.http import respond
+from ajna_cloud import logger, log_handler, respond
 
 @log_handler
 @require_admin_role
@@ -44,7 +43,11 @@ def setup_database(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, 
             'images',
             'user_goals',
             'meal_summaries',
-            'health_assessments'
+            'health_assessments',
+            'api_costs',
+            'shopping_lists',
+            'shopping_list_items',
+            'receipt_item_embeddings',
         ]
 
         for table_name in essential_tables:

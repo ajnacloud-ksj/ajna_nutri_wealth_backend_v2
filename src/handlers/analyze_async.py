@@ -5,17 +5,11 @@ from datetime import datetime
 from typing import Dict, Any, Optional, Optional
 
 from src.lib.auth_provider import get_user_id
-from src.lib.logger import logger
-from src.utils.http import respond
+from ajna_cloud import logger, respond
 from src.config.settings import settings
 from src.lib.ai_optimized import OptimizedAIService
+from src.lib.ibex_client_optimized import OptimizedIbexClient as IbexClient
 import boto3
-
-# Use OptimizedIbexClient if available
-try:
-    from src.lib.ibex_client_optimized import OptimizedIbexClient as IbexClient
-except ImportError:
-    from src.lib.ibex_client import IbexClient
 
 def submit_analysis(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
@@ -328,8 +322,9 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
                 if category == 'food':
                     storage_success = _store_food_result(db, user_id, entry_id, data, image_url, description)
                 elif category == 'receipt':
-                    _store_receipt_result(db, user_id, entry_id, data, image_url)
-                    storage_success = True  # Assume success for receipt (add similar error handling later)
+                    storage_success = _store_receipt_result(db, user_id, entry_id, data, image_url)
+                elif category == 'workout':
+                    storage_success = _store_workout_result(db, user_id, entry_id, data, image_url)
 
                 if not storage_success:
                     raise Exception(f"Failed to store {category} result for entry {entry_id}")
@@ -496,6 +491,29 @@ def _store_food_result(db, user_id: str, entry_id: str, data: Dict, image_url: s
         if result.get('success'):
             logger.info(f"✅ Successfully stored food entry {entry_id} for user {user_id}")
 
+            # Store individual food items in app_food_items table
+            if food_items:
+                item_records = []
+                for item in food_items:
+                    item_records.append({
+                        'id': str(uuid.uuid4()),
+                        'food_entry_id': entry_id,
+                        'name': item.get('name', 'Unknown'),
+                        'serving_size': item.get('serving_size', ''),
+                        'calories': item.get('calories', 0),
+                        'proteins': item.get('protein', item.get('proteins', 0)),
+                        'carbohydrates': item.get('carbs', item.get('carbohydrates', 0)),
+                        'fats': item.get('fat', item.get('fats', 0)),
+                        'fiber': item.get('fiber', 0),
+                        'sodium': item.get('sodium', 0),
+                        'created_at': datetime.utcnow().isoformat()
+                    })
+                items_write = db.write('app_food_items', item_records)
+                if items_write.get('success'):
+                    logger.info(f"✅ Stored {len(item_records)} food items for entry {entry_id}")
+                else:
+                    logger.error(f"Failed to store food items for {entry_id}: {items_write.get('error')}")
+
             # Verify the write was successful by querying back
             verify_result = db.query("app_food_entries_v2",
                                     filters=[
@@ -542,75 +560,174 @@ def _store_food_result(db, user_id: str, entry_id: str, data: Dict, image_url: s
         raise
 
 
-def _store_receipt_result(db, user_id: str, entry_id: str, data: Dict, image_url: str):
-    """Store comprehensive receipt analysis result"""
+def _store_receipt_result(db, user_id: str, entry_id: str, data: Dict, image_url: str) -> bool:
+    """Store comprehensive receipt analysis result. Returns True on success."""
+    try:
+        # Extract financial summary
+        financial = data.get('financial_summary', {})
 
-    # Extract financial summary
-    financial = data.get('financial_summary', {})
+        # Extract location info
+        location = data.get('store_location', {})
 
-    # Extract location info
-    location = data.get('store_location', {})
+        # Extract payment info
+        payment = data.get('payment', {})
 
-    # Extract payment info
-    payment = data.get('payment', {})
+        # Store main receipt record with all available fields
+        receipt_record = {
+            "id": entry_id,
+            "user_id": user_id,
+            "vendor": data.get('merchant_name', 'Unknown'),
+            "store_address": data.get('store_address', ''),
+            "city": location.get('city', ''),
+            "state": location.get('state', ''),
+            "postal_code": location.get('postal_code', ''),
+            "country": location.get('country', 'USA'),
+            "receipt_date": data.get('purchase_date', datetime.utcnow().strftime('%Y-%m-%d')),
+            "receipt_time": data.get('purchase_time', ''),
+            "purchase_channel": data.get('receipt_category', 'Retail'),
+            "total_amount": financial.get('total_amount', data.get('total_amount', 0)),
+            "subtotal": financial.get('subtotal', 0),
+            "tax_amount": financial.get('tax_amount', data.get('tax_amount', 0)),
+            "discount_amount": financial.get('discount_amount', 0),
+            "currency": financial.get('currency', 'USD'),
+            "payment_method": payment.get('method', ''),
+            "card_last_digits": payment.get('card_last_digits', ''),
+            "transaction_id": payment.get('transaction_id', ''),
+            "receipt_id": data.get('receipt_number', ''),
+            "image_url": image_url or '',
+            "notes": data.get('notes', ''),
+            "tags": data.get('receipt_category', ''),
+            # Store full items data as JSON for reference
+            "items": json.dumps(data.get('items', [])),
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat()
+        }
 
-    # Store main receipt record with all available fields
-    receipt_record = {
-        "id": entry_id,
-        "user_id": user_id,
-        "vendor": data.get('merchant_name', 'Unknown'),
-        "store_address": data.get('store_address', ''),
-        "city": location.get('city', ''),
-        "state": location.get('state', ''),
-        "postal_code": location.get('postal_code', ''),
-        "country": location.get('country', 'USA'),
-        "receipt_date": data.get('purchase_date', datetime.utcnow().strftime('%Y-%m-%d')),
-        "receipt_time": data.get('purchase_time', ''),
-        "purchase_channel": data.get('receipt_category', 'Retail'),
-        "total_amount": financial.get('total_amount', data.get('total_amount', 0)),
-        "subtotal": financial.get('subtotal', 0),
-        "tax_amount": financial.get('tax_amount', data.get('tax_amount', 0)),
-        "discount_amount": financial.get('discount_amount', 0),
-        "currency": financial.get('currency', 'USD'),
-        "payment_method": payment.get('method', ''),
-        "card_last_digits": payment.get('card_last_digits', ''),
-        "transaction_id": payment.get('transaction_id', ''),
-        "receipt_id": data.get('receipt_number', ''),
-        "image_url": image_url or '',
-        "notes": data.get('notes', ''),
-        "tags": data.get('receipt_category', ''),
-        # Store full items data as JSON for reference
-        "items": json.dumps(data.get('items', [])),
-        "created_at": datetime.utcnow().isoformat(),
-        "updated_at": datetime.utcnow().isoformat()
-    }
+        result = db.write("app_receipts", [receipt_record])
+        if not result.get('success'):
+            raise Exception(f"Failed to write receipt: {result.get('error')}")
 
-    db.write("app_receipts", [receipt_record])
+        # Store detailed items in separate table
+        items = data.get('items', [])
+        if items:
+            item_records = []
+            for idx, item in enumerate(items):
+                item_record = {
+                    "id": str(uuid.uuid4()),
+                    "receipt_id": entry_id,
+                    "name": item.get('name', f'Item {idx+1}'),
+                    "sku": item.get('sku', ''),
+                    "quantity": item.get('quantity', 1),
+                    "unit_price": item.get('unit_price', item.get('price', 0)),
+                    "total_price": item.get('total_price',
+                                  item.get('quantity', 1) * item.get('unit_price', item.get('price', 0))),
+                    "discount": item.get('discount', 0),
+                    "category": item.get('category', 'Other'),
+                    "department": item.get('department', ''),
+                    "is_taxable": item.get('is_taxable', True),
+                    "created_at": datetime.utcnow().isoformat(),
+                    "updated_at": datetime.utcnow().isoformat()
+                }
+                item_records.append(item_record)
 
-    # Store detailed items in separate table
-    items = data.get('items', [])
-    if items:
-        item_records = []
-        for idx, item in enumerate(items):
-            item_record = {
-                "id": str(uuid.uuid4()),
-                "receipt_id": entry_id,
-                "name": item.get('name', f'Item {idx+1}'),
-                "sku": item.get('sku', ''),
-                "quantity": item.get('quantity', 1),
-                "unit_price": item.get('unit_price', item.get('price', 0)),
-                "total_price": item.get('total_price',
-                              item.get('quantity', 1) * item.get('unit_price', item.get('price', 0))),
-                "discount": item.get('discount', 0),
-                "category": item.get('category', 'Other'),
-                "department": item.get('department', ''),
-                "is_taxable": item.get('is_taxable', True),
-                "created_at": datetime.utcnow().isoformat(),
-                "updated_at": datetime.utcnow().isoformat()
-            }
-            item_records.append(item_record)
+            if item_records:
+                items_result = db.write("app_receipt_items", item_records)
+                if not items_result.get('success'):
+                    logger.error(f"Failed to write receipt items for {entry_id}: {items_result.get('error')}")
 
-        if item_records:
-            db.write("app_receipt_items", item_records)
+                # Generate embeddings for receipt items (for semantic shopping search)
+                try:
+                    from lib.embeddings import get_embeddings_batch, zvec_insert_items
+                    item_texts = [f"{item.get('name', '')} {item.get('category', '')}".strip() for item in items]
+                    embeddings = get_embeddings_batch(item_texts)
 
-    logger.info(f"Stored receipt {entry_id} with {len(items)} items for user {user_id}")
+                    embedding_records = []
+                    zvec_items = []
+                    for item_rec, emb in zip(item_records, embeddings):
+                        embedding_records.append({
+                            'id': str(uuid.uuid4()),
+                            'receipt_item_id': item_rec['id'],
+                            'item_name': item_rec['name'],
+                            'category': item_rec.get('category', ''),
+                            'unit_price': item_rec.get('unit_price', item_rec.get('total_price', 0)),
+                            'store_name': data.get('merchant_name', 'Unknown'),
+                            'embedding': json.dumps(emb),
+                            'embedding_model': 'text-embedding-3-small',
+                            'created_at': datetime.utcnow().isoformat()
+                        })
+                        zvec_items.append({
+                            'receipt_item_id': item_rec['id'],
+                            'item_name': item_rec['name'],
+                            'category': item_rec.get('category', ''),
+                            'unit_price': item_rec.get('unit_price', item_rec.get('total_price', 0)),
+                            'store_name': data.get('merchant_name', 'Unknown'),
+                            'embedding': emb,
+                        })
+                    if embedding_records:
+                        db.write('app_receipt_item_embeddings', embedding_records)
+                        zvec_insert_items(zvec_items)
+                        logger.info(f"Receipt item embeddings stored for {entry_id}: {len(embedding_records)} items")
+                except Exception as e:
+                    logger.error(f"Failed to generate receipt item embeddings: {e}")
+
+        logger.info(f"Stored receipt {entry_id} with {len(items)} items for user {user_id}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Failed to store receipt {entry_id}: {str(e)}", exc_info=True)
+        raise
+
+
+def _store_workout_result(db, user_id: str, entry_id: str, data: Dict, image_url: str) -> bool:
+    """Store workout analysis result. Returns True on success."""
+    try:
+        workout_type = data.get('workout_type', 'General')
+        duration = data.get('duration_minutes', 0)
+        calories = data.get('calories_burned_estimate', 0)
+
+        workout_record = {
+            'id': entry_id,
+            'user_id': user_id,
+            'workout_type': workout_type,
+            'duration_minutes': duration,
+            'calories_burned': calories,
+            'workout_date': data.get('workout_date') or datetime.utcnow().strftime('%Y-%m-%d'),
+            'notes': data.get('notes', ''),
+            'image_url': image_url or '',
+            'created_at': datetime.utcnow().isoformat(),
+            'updated_at': datetime.utcnow().isoformat()
+        }
+
+        result = db.write('app_workouts', [workout_record])
+        if not result.get('success'):
+            raise Exception(f"Failed to write workout: {result.get('error')}")
+
+        # Store individual exercises
+        exercises = data.get('exercises', [])
+        if exercises:
+            ex_records = []
+            for ex in exercises:
+                ex_records.append({
+                    'id': str(uuid.uuid4()),
+                    'workout_id': entry_id,
+                    'exercise_name': ex.get('name', 'Exercise'),
+                    'sets': ex.get('sets'),
+                    'reps': ex.get('reps'),
+                    'weight': ex.get('weight_lbs'),
+                    'distance': ex.get('distance_miles'),
+                    'duration_seconds': ex.get('duration_seconds'),
+                    'calories_burned': ex.get('calories_burned', 0),
+                    'created_at': datetime.utcnow().isoformat()
+                })
+            ex_result = db.write('app_workout_exercises', ex_records)
+            if ex_result.get('success'):
+                logger.info(f"Stored {len(ex_records)} exercises for workout {entry_id}")
+            else:
+                logger.error(f"Failed to store exercises for {entry_id}: {ex_result.get('error')}")
+
+        logger.info(f"Stored workout {entry_id}: {workout_type}, {duration}min, {calories}cal for user {user_id}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Failed to store workout {entry_id}: {str(e)}", exc_info=True)
+        raise

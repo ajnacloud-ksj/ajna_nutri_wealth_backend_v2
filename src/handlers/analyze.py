@@ -354,6 +354,37 @@ def _store_food_entry(
                 calories=total_calories
             )
 
+            # Store individual food items in app_food_items table
+            if food_items:
+                item_records = []
+                for item in food_items:
+                    item_records.append({
+                        'id': str(uuid.uuid4()),
+                        'food_entry_id': entry_id,
+                        'name': item.get('name', 'Unknown'),
+                        'serving_size': item.get('serving_size', ''),
+                        'calories': item.get('calories', 0),
+                        'proteins': item.get('protein', item.get('proteins', 0)),
+                        'carbohydrates': item.get('carbs', item.get('carbohydrates', 0)),
+                        'fats': item.get('fat', item.get('fats', 0)),
+                        'fiber': item.get('fiber', 0),
+                        'sodium': item.get('sodium', 0),
+                        'created_at': datetime.utcnow().isoformat()
+                    })
+                items_result = db.write('app_food_items', item_records)
+                if items_result.get('success'):
+                    logger.info(
+                        "Food items stored",
+                        entry_id=entry_id,
+                        item_count=len(item_records)
+                    )
+                else:
+                    logger.error(
+                        "Failed to store food items",
+                        entry_id=entry_id,
+                        error=items_result.get('error')
+                    )
+
             return {
                 'success': True,
                 'entry_id': entry_id,
@@ -438,6 +469,41 @@ def _store_receipt(
                     'created_at': datetime.utcnow().isoformat()
                 })
             db.write('app_receipt_items', item_records)
+
+            # Generate embeddings for receipt items (for semantic shopping search)
+            try:
+                from lib.embeddings import get_embeddings_batch, zvec_insert_items
+                item_texts = [f"{item.get('name', '')} {item.get('category', '')}".strip() for item in items]
+                embeddings = get_embeddings_batch(item_texts)
+
+                embedding_records = []
+                zvec_items = []
+                for item_rec, emb in zip(item_records, embeddings):
+                    embedding_records.append({
+                        'id': str(uuid.uuid4()),
+                        'receipt_item_id': item_rec['id'],
+                        'item_name': item_rec['name'],
+                        'category': item_rec.get('category', ''),
+                        'unit_price': item_rec.get('price', 0),
+                        'store_name': merchant,
+                        'embedding': json.dumps(emb),
+                        'embedding_model': 'text-embedding-3-small',
+                        'created_at': datetime.utcnow().isoformat()
+                    })
+                    zvec_items.append({
+                        'receipt_item_id': item_rec['id'],
+                        'item_name': item_rec['name'],
+                        'category': item_rec.get('category', ''),
+                        'unit_price': item_rec.get('price', 0),
+                        'store_name': merchant,
+                        'embedding': emb,
+                    })
+                if embedding_records:
+                    db.write('app_receipt_item_embeddings', embedding_records)
+                    zvec_insert_items(zvec_items)
+                    logger.info("Receipt item embeddings stored", entry_id=entry_id, count=len(embedding_records))
+            except Exception as e:
+                logger.warning(f"Failed to generate receipt item embeddings: {e}")
 
         logger.info(
             "Receipt stored",

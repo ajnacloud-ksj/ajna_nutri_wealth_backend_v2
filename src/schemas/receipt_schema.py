@@ -1,9 +1,17 @@
 """
-Receipt Schema for Structured Outputs
-Defines the JSON schema for receipt analysis responses
+Receipt Schema for OpenAI Structured Outputs (strict mode)
+
+All properties must be listed in "required".
+Nullable fields use {"anyOf": [{"type": "string"}, {"type": "null"}]}.
+No "default", "pattern", or "additionalProperties" at nested levels in strict mode.
 """
 
-# OpenAI Structured Output Schema for Receipts
+# Helper for nullable string
+_nullable_string = {"anyOf": [{"type": "string"}, {"type": "null"}]}
+_nullable_number = {"anyOf": [{"type": "number"}, {"type": "null"}]}
+_nullable_boolean = {"anyOf": [{"type": "boolean"}, {"type": "null"}]}
+
+
 RECEIPT_RESPONSE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -12,43 +20,42 @@ RECEIPT_RESPONSE_SCHEMA = {
             "description": "Store/vendor name exactly as shown"
         },
         "store_address": {
-            "type": ["string", "null"],
+            **_nullable_string,
             "description": "Full address if visible"
         },
         "store_phone": {
-            "type": ["string", "null"],
+            **_nullable_string,
             "description": "Phone number if visible"
         },
         "store_location": {
             "type": "object",
             "properties": {
-                "city": {"type": ["string", "null"]},
-                "state": {"type": ["string", "null"]},
-                "postal_code": {"type": ["string", "null"]},
-                "country": {"type": ["string", "null"]}
+                "city": {**_nullable_string, "description": "City name"},
+                "state": {**_nullable_string, "description": "State/province"},
+                "postal_code": {**_nullable_string, "description": "ZIP/postal code"},
+                "country": {**_nullable_string, "description": "Country name or code"}
             },
-            "required": []
+            "required": ["city", "state", "postal_code", "country"],
+            "additionalProperties": False
         },
         "purchase_date": {
             "type": "string",
-            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
             "description": "Date in YYYY-MM-DD format"
         },
         "purchase_time": {
-            "type": ["string", "null"],
-            "pattern": "^\\d{2}:\\d{2}:\\d{2}$",
+            **_nullable_string,
             "description": "Time in HH:MM:SS format"
         },
         "receipt_number": {
-            "type": ["string", "null"],
+            **_nullable_string,
             "description": "Receipt/transaction number"
         },
         "cashier": {
-            "type": ["string", "null"],
+            **_nullable_string,
             "description": "Cashier name/ID if shown"
         },
         "register": {
-            "type": ["string", "null"],
+            **_nullable_string,
             "description": "Register/terminal number if shown"
         },
         "financial_summary": {
@@ -63,16 +70,16 @@ RECEIPT_RESPONSE_SCHEMA = {
                     "description": "Total tax"
                 },
                 "tax_rate": {
-                    "type": ["number", "null"],
+                    **_nullable_number,
                     "description": "Tax percentage if calculable"
                 },
                 "discount_amount": {
                     "type": "number",
-                    "description": "Total discounts/savings"
+                    "description": "Total discounts/savings (0 if none)"
                 },
                 "tip_amount": {
                     "type": "number",
-                    "description": "Tip if applicable"
+                    "description": "Tip if applicable (0 if none)"
                 },
                 "total_amount": {
                     "type": "number",
@@ -80,11 +87,11 @@ RECEIPT_RESPONSE_SCHEMA = {
                 },
                 "currency": {
                     "type": "string",
-                    "default": "USD",
-                    "description": "Currency code"
+                    "description": "Currency code (e.g. USD, EUR)"
                 }
             },
-            "required": ["subtotal", "tax_amount", "total_amount"]
+            "required": ["subtotal", "tax_amount", "tax_rate", "discount_amount", "tip_amount", "total_amount", "currency"],
+            "additionalProperties": False
         },
         "items": {
             "type": "array",
@@ -96,13 +103,12 @@ RECEIPT_RESPONSE_SCHEMA = {
                         "description": "Full item name/description"
                     },
                     "sku": {
-                        "type": ["string", "null"],
+                        **_nullable_string,
                         "description": "SKU/barcode if visible"
                     },
                     "quantity": {
                         "type": "number",
-                        "default": 1,
-                        "description": "Item quantity"
+                        "description": "Item quantity (1 if not specified)"
                     },
                     "unit_price": {
                         "type": "number",
@@ -113,11 +119,11 @@ RECEIPT_RESPONSE_SCHEMA = {
                         "description": "Total price for this item"
                     },
                     "discount": {
-                        "type": ["number", "null"],
+                        **_nullable_number,
                         "description": "Item-specific discount"
                     },
                     "tax": {
-                        "type": ["number", "null"],
+                        **_nullable_number,
                         "description": "Item-specific tax if shown"
                     },
                     "category": {
@@ -127,16 +133,16 @@ RECEIPT_RESPONSE_SCHEMA = {
                         "description": "Item category"
                     },
                     "department": {
-                        "type": ["string", "null"],
+                        **_nullable_string,
                         "description": "Department if shown on receipt"
                     },
                     "is_taxable": {
                         "type": "boolean",
-                        "default": True,
                         "description": "Whether item was taxed"
                     }
                 },
-                "required": ["name", "total_price", "category"]
+                "required": ["name", "sku", "quantity", "unit_price", "total_price", "discount", "tax", "category", "department", "is_taxable"],
+                "additionalProperties": False
             }
         },
         "payment": {
@@ -148,25 +154,24 @@ RECEIPT_RESPONSE_SCHEMA = {
                     "description": "Payment method"
                 },
                 "card_type": {
-                    "type": ["string", "null"],
-                    "enum": ["Visa", "Mastercard", "Amex", "Discover", None],
-                    "description": "Card type if applicable"
+                    **_nullable_string,
+                    "description": "Card type (Visa, Mastercard, Amex, Discover) or null"
                 },
                 "card_last_digits": {
-                    "type": ["string", "null"],
-                    "pattern": "^\\d{4}$",
+                    **_nullable_string,
                     "description": "Last 4 digits if shown"
                 },
                 "transaction_id": {
-                    "type": ["string", "null"],
+                    **_nullable_string,
                     "description": "Payment transaction ID"
                 },
                 "approval_code": {
-                    "type": ["string", "null"],
+                    **_nullable_string,
                     "description": "Payment approval code if shown"
                 }
             },
-            "required": ["method"]
+            "required": ["method", "card_type", "card_last_digits", "transaction_id", "approval_code"],
+            "additionalProperties": False
         },
         "receipt_category": {
             "type": "string",
@@ -174,18 +179,31 @@ RECEIPT_RESPONSE_SCHEMA = {
             "description": "Overall receipt category"
         },
         "loyalty_info": {
-            "type": ["object", "null"],
-            "properties": {
-                "member_id": {"type": ["string", "null"]},
-                "points_earned": {"type": ["number", "null"]},
-                "points_balance": {"type": ["number", "null"]}
-            }
+            "anyOf": [
+                {
+                    "type": "object",
+                    "properties": {
+                        "member_id": {**_nullable_string, "description": "Loyalty/member number"},
+                        "points_earned": {**_nullable_number, "description": "Points earned this transaction"},
+                        "points_balance": {**_nullable_number, "description": "Total points balance if shown"}
+                    },
+                    "required": ["member_id", "points_earned", "points_balance"],
+                    "additionalProperties": False
+                },
+                {"type": "null"}
+            ],
+            "description": "Loyalty program info if available"
         },
         "notes": {
-            "type": ["string", "null"],
+            **_nullable_string,
             "description": "Any additional observations"
         }
     },
-    "required": ["merchant_name", "purchase_date", "financial_summary", "items", "payment", "receipt_category"],
+    "required": [
+        "merchant_name", "store_address", "store_phone", "store_location",
+        "purchase_date", "purchase_time", "receipt_number", "cashier", "register",
+        "financial_summary", "items", "payment", "receipt_category",
+        "loyalty_info", "notes"
+    ],
     "additionalProperties": False
 }

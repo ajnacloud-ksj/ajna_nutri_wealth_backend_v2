@@ -8,11 +8,11 @@ import os
 import sys
 from typing import Dict, Any
 
-# Import core services using absolute imports from src package
+# Import core services — IbexDB client powered by ajna-cloud-sdk
 from src.lib.ibex_client_optimized import OptimizedIbexClient as IbexClient
 from src.lib.ai_optimized import OptimizedAIService
 from src.lib.tenant_manager import TenantManager
-from src.lib.logger import logger
+from ajna_cloud import logger
 from src.config.settings import settings
 import src.router as router
 
@@ -45,18 +45,10 @@ IBEX_API_URL = db_config.api_url
 IBEX_API_KEY = db_config.api_key
 TENANT_ID = db_config.tenant_id
 NAMESPACE = db_config.namespace
-IBEX_LAMBDA_NAME = os.environ.get('IBEX_LAMBDA_NAME')
-
-# Initialize database client
+# Initialize database client (uses HTTP API Gateway)
 try:
     db = IbexClient(IBEX_API_URL, IBEX_API_KEY, TENANT_ID, NAMESPACE)
-    
-    # Enable Direct Lambda Invocation if configured (bypasses API Gateway 403 issues)
-    if IBEX_LAMBDA_NAME:
-        db.enable_direct_lambda(function_name=IBEX_LAMBDA_NAME, use_for_writes_only=False)
-        logger.info(f"Enabled Direct Lambda Invocation for Ibex: {IBEX_LAMBDA_NAME}")
-        
-    logger.info("Database client initialized successfully")
+    logger.info("Database client initialized successfully (HTTP API)")
 except Exception as e:
     logger.critical(f"Database initialization failed: {e}")
     db = None
@@ -116,12 +108,8 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         'display_name': 'Default'
                     }
 
-                # Create database client for SQS processing
+                # Create database client for SQS processing (HTTP API)
                 tenant_db = TenantManager.create_ibex_client(tenant_config, client_class=IbexClient)
-
-                # Enable Direct Lambda if configured
-                if IBEX_LAMBDA_NAME:
-                    tenant_db.enable_direct_lambda(function_name=IBEX_LAMBDA_NAME, use_for_writes_only=False)
 
                 # Build context for SQS handler
                 handler_context = {
@@ -161,16 +149,8 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             request_id=request_id
         )
 
-        # Create tenant-specific database client
-        # Create tenant-specific database client with Optimized Client
+        # Create tenant-specific database client (HTTP API)
         tenant_db = TenantManager.create_ibex_client(tenant_config, client_class=IbexClient)
-        
-        # Enable Direct Lambda Invocation for tenant client
-        # This is CRITICAL because we are not using API Keys
-        if IBEX_LAMBDA_NAME:
-            tenant_db.enable_direct_lambda(function_name=IBEX_LAMBDA_NAME, use_for_writes_only=False)
-            logger.debug(f"Direct Lambda Invocation enabled for tenant DB: {IBEX_LAMBDA_NAME}")
-
         logger.debug(f"Tenant DB initialized for namespace: {tenant_config['namespace']}")
 
         # Create tenant-specific AI service

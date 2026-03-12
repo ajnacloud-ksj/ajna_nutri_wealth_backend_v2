@@ -65,8 +65,8 @@ class ModelManager:
             model_name="gpt-4o-mini",
             base_url="https://api.openai.com/v1",
             temperature=0.0,
-            max_tokens=500,
-            timeout_seconds=20,
+            max_tokens=2048,
+            timeout_seconds=30,
             cost_per_1k_tokens=0.00015,
             fallback_provider="groq",
             fallback_model="llama-3.3-70b-versatile",
@@ -78,8 +78,8 @@ class ModelManager:
             model_name="gpt-4o-mini",
             base_url="https://api.openai.com/v1",
             temperature=0.0,
-            max_tokens=500,
-            timeout_seconds=20,
+            max_tokens=4096,
+            timeout_seconds=30,
             cost_per_1k_tokens=0.00015,
             fallback_provider="groq",
             fallback_model="llama-3.3-70b-versatile",
@@ -91,8 +91,19 @@ class ModelManager:
             model_name="gpt-4o-mini",
             base_url="https://api.openai.com/v1",
             temperature=0.0,
-            max_tokens=500,
-            timeout_seconds=20,
+            max_tokens=2048,
+            timeout_seconds=30,
+            cost_per_1k_tokens=0.00015,
+            api_key_env="OPENAI_API_KEY"
+        ),
+        "shopping": ModelConfig(
+            use_case="shopping",
+            provider="openai",
+            model_name="gpt-4o-mini",
+            base_url="https://api.openai.com/v1",
+            temperature=0.3,
+            max_tokens=4096,
+            timeout_seconds=30,
             cost_per_1k_tokens=0.00015,
             api_key_env="OPENAI_API_KEY"
         )
@@ -270,7 +281,7 @@ class ModelManager:
     def get_all_configs(self) -> Dict[str, ModelConfig]:
         """Get all model configurations"""
         configs = {}
-        for use_case in ["classifier", "food", "receipt", "workout"]:
+        for use_case in ["classifier", "food", "receipt", "workout", "shopping"]:
             configs[use_case] = self.get_model_config(use_case)
         return configs
 
