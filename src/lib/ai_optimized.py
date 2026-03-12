@@ -248,12 +248,30 @@ Return ONLY a JSON object with:
             }
         elif category == "receipt":
             return {
-                "system_prompt": "You are a receipt parser. Extract merchant, date, total, and items. Return valid JSON.",
-                "user_prompt_template": "Parse this receipt: {description}"
+                "system_prompt": (
+                    "You are a receipt/purchase parser. Extract purchase details and return valid JSON with these fields:\n"
+                    "- merchant_name: actual store/vendor name (e.g. 'Walmart', 'Coffee Shop', 'Unknown' if not stated)\n"
+                    "- purchase_date: date in YYYY-MM-DD format, use today's date if not specified\n"
+                    "- financial_summary: {total_amount, subtotal, tax_amount, discount_amount, currency}\n"
+                    "- items: array of {name, quantity, unit_price, total_price, category}\n"
+                    "- payment_method: cash/card/etc if mentioned\n"
+                    "Fill in reasonable values from context. Never use placeholder text like 'string' or 'YYYY-MM-DD'."
+                ),
+                "user_prompt_template": "Parse this purchase/receipt: {description}"
             }
         elif category == "workout":
             return {
-                "system_prompt": "You are a fitness tracker. Extract workout type, duration, and exercises. Return valid JSON.",
+                "system_prompt": (
+                    "You are a fitness tracker. Extract workout details and return valid JSON with these fields:\n"
+                    "- workout_type: type of workout (e.g. 'Running', 'Weight Training', 'Yoga', 'HIIT', 'General')\n"
+                    "- duration_minutes: total duration in minutes as a number (estimate if not stated)\n"
+                    "- calories_burned: estimated calories burned as a number\n"
+                    "- intensity_level: 'low', 'moderate', or 'high'\n"
+                    "- muscle_groups: comma-separated list of muscle groups worked\n"
+                    "- notes: brief summary of the workout\n"
+                    "- exercises: array of objects with {name, sets, reps, weight_lbs, distance_miles, duration_seconds, calories_burned}\n"
+                    "Fill in reasonable estimates. Never use placeholder text."
+                ),
                 "user_prompt_template": "Analyze this workout: {description}"
             }
 

@@ -684,16 +684,19 @@ def _store_workout_result(db, user_id: str, entry_id: str, data: Dict, image_url
     """Store workout analysis result. Returns True on success."""
     try:
         workout_type = data.get('workout_type', 'General')
-        duration = data.get('duration_minutes', 0)
-        calories = data.get('calories_burned_estimate', 0)
+        duration = float(data.get('duration_minutes') or data.get('duration') or 0)
+        calories = float(data.get('calories_burned') or data.get('calories_burned_estimate') or data.get('estimated_calories') or 0)
 
         workout_record = {
             'id': entry_id,
             'user_id': user_id,
             'workout_type': workout_type,
-            'duration_minutes': duration,
+            'duration': duration,
             'calories_burned': calories,
             'workout_date': data.get('workout_date') or datetime.utcnow().strftime('%Y-%m-%d'),
+            'intensity_level': data.get('intensity_level', ''),
+            'muscle_groups': data.get('muscle_groups', ''),
+            'description': data.get('notes') or data.get('description') or '',
             'notes': data.get('notes', ''),
             'image_url': image_url or '',
             'created_at': datetime.utcnow().isoformat(),
@@ -717,7 +720,7 @@ def _store_workout_result(db, user_id: str, entry_id: str, data: Dict, image_url
                     'reps': ex.get('reps'),
                     'weight': ex.get('weight_lbs'),
                     'distance': ex.get('distance_miles'),
-                    'duration_seconds': ex.get('duration_seconds'),
+                    'duration_minutes': float(ex.get('duration_seconds', 0) or 0) / 60.0 if ex.get('duration_seconds') else float(ex.get('duration_minutes', 0) or 0),
                     'calories_burned': ex.get('calories_burned', 0),
                     'created_at': datetime.utcnow().isoformat()
                 })

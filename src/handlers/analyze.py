@@ -431,9 +431,13 @@ def _store_receipt(
             # This is already a URL, use as is
             s3_image_url = image_url
 
-        # Extract receipt data
-        merchant = ai_data.get('merchant_name', 'Unknown Vendor')
-        date_str = ai_data.get('purchase_date') or datetime.utcnow().strftime('%Y-%m-%d')
+        # Extract receipt data (guard against AI returning placeholder values)
+        merchant = ai_data.get('merchant_name') or ai_data.get('vendor') or 'Unknown Vendor'
+        if merchant.lower() in ('string', 'unknown', 'n/a', ''):
+            merchant = 'Unknown Vendor'
+        date_str = ai_data.get('purchase_date') or ai_data.get('receipt_date') or datetime.utcnow().strftime('%Y-%m-%d')
+        if 'YYYY' in date_str or date_str == 'string':
+            date_str = datetime.utcnow().strftime('%Y-%m-%d')
         financial = ai_data.get('financial_summary', {})
         total = financial.get('total_amount') or ai_data.get('total_amount', 0.0) or 0.0
         currency = financial.get('currency') or ai_data.get('currency', 'USD')
@@ -568,20 +572,23 @@ def _store_workout(
             # This is already a URL, use as is
             s3_image_url = image_url
 
-        # Extract workout data
+        # Extract workout data (flexible key names from AI response)
         workout_type = ai_data.get('workout_type', 'General')
-        duration = ai_data.get('duration_minutes', 0)
-        calories = ai_data.get('calories_burned_estimate', 0)
+        duration = float(ai_data.get('duration_minutes') or ai_data.get('duration') or 0)
+        calories = float(ai_data.get('calories_burned') or ai_data.get('calories_burned_estimate') or ai_data.get('estimated_calories') or 0)
 
         # Create workout record with S3 URL instead of base64
         workout_record = {
             'id': entry_id,
             'user_id': user_id,
             'workout_type': workout_type,
-            'duration_minutes': duration,
+            'duration': duration,
             'calories_burned': calories,
             'workout_date': ai_data.get('workout_date') or datetime.utcnow().strftime('%Y-%m-%d'),
-            'notes': ai_data.get('notes'),
+            'intensity_level': ai_data.get('intensity_level', ''),
+            'muscle_groups': ai_data.get('muscle_groups', ''),
+            'description': ai_data.get('notes') or ai_data.get('description') or '',
+            'notes': ai_data.get('notes') or '',
             'image_url': s3_image_url or '',  # Store S3 URL, not base64
             'image_storage_type': 's3' if s3_image_url else 'none',
             'created_at': datetime.utcnow().isoformat()
@@ -603,6 +610,8 @@ def _store_workout(
                     'reps': ex.get('reps'),
                     'weight': ex.get('weight_lbs'),
                     'distance': ex.get('distance_miles'),
+                    'duration_minutes': float(ex.get('duration_seconds', 0) or 0) / 60.0 if ex.get('duration_seconds') else float(ex.get('duration_minutes', 0) or 0),
+                    'calories_burned': float(ex.get('calories_burned', 0) or 0),
                     'created_at': datetime.utcnow().isoformat()
                 })
             db.write('app_workout_exercises', ex_records)
