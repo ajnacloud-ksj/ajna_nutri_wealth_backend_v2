@@ -412,18 +412,26 @@ def upload_csv(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]
     batch_id = str(uuid.uuid4())
     now = datetime.utcnow().isoformat()
 
-    # Deduplicate against existing transactions
-    # Check for same user + date + description + amount
+    # Deduplicate against existing transactions using targeted SQL
+    # Only check the specific (date, description, amount) combos from this CSV
     existing = set()
     try:
-        sql = f"SELECT date, description, amount FROM app_bank_transactions WHERE user_id = '{user_id}'"
-        result = db.execute_sql(sql)
-        records = result.get('data', {}).get('records', [])
-        for r in records:
-            amt = round(float(r.get('amount', 0)), 2)
-            key = f"{r.get('date')}|{r.get('description')}|{amt}"
-            existing.add(key)
-        print(f"[dedup] Found {len(existing)} existing transactions for user {user_id}")
+        # Build a targeted query: only fetch existing rows that match dates in this upload
+        upload_dates = list({txn['date'] for txn in transactions})
+        if upload_dates:
+            date_list = ", ".join(f"'{d}'" for d in upload_dates)
+            sql = (
+                f"SELECT date, description, ROUND(CAST(amount AS DOUBLE), 2) AS amount "
+                f"FROM app_bank_transactions "
+                f"WHERE user_id = '{user_id}' AND date IN ({date_list})"
+            )
+            result = db.execute_sql(sql)
+            records = result.get('data', {}).get('records', [])
+            for r in records:
+                amt = round(float(r.get('amount', 0)), 2)
+                key = f"{r.get('date')}|{r.get('description')}|{amt}"
+                existing.add(key)
+        print(f"[dedup] Found {len(existing)} existing transactions matching upload dates")
     except Exception as e:
         print(f"[dedup] SQL query failed, skipping dedup: {e}")
 
@@ -593,42 +601,6 @@ def delete_batch(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, An
         return respond(500, {"error": str(e)})
 
 
-@require_auth
-def get_dashboard_data(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    GET /v1/bank-statements/dashboard
-    Returns pre-aggregated dashboard data from stored transactions.
-    All heavy computation done here so frontend is lightweight.
-    """
-    db = context['db']
-    user_id = get_user_id(event) or 'local-dev-user'
-
-    try:
-        sql = f"SELECT * FROM app_bank_transactions WHERE user_id = '{user_id}' ORDER BY date ASC"
-        result = db.execute_sql(sql)
-        transactions = result.get('data', {}).get('records', [])
-
-        if not transactions:
-            return respond(200, {"transactions": [], "monthlyData": [], "dateRange": None})
-
-        # Build dashboard aggregates server-side
-        dashboard = _build_dashboard(transactions)
-        return respond(200, dashboard)
-
-    except Exception as e:
-        print(f"Error building dashboard: {e}")
-        return respond(500, {"error": str(e)})
-
-
-def _month_key(date_str: str) -> str:
-    """Convert YYYY-MM-DD to 'Mon YYYY' format"""
-    try:
-        d = datetime.strptime(date_str, '%Y-%m-%d')
-        return d.strftime('%b %Y')
-    except ValueError:
-        return date_str[:7]
-
-
 EXPENSE_CATEGORIES = [
     "Housing/Rent", "Groceries", "Dining", "Gas/Fuel", "Software/Tech",
     "Shopping", "Medical", "Insurance", "Utilities", "Auto", "Personal Care",
@@ -651,177 +623,227 @@ CATEGORY_COLORS = {
     "Charity": "#f472b6", "Zelle Send": "#d946ef", "Fees": "#78716c", "Other": "#6b7280"
 }
 
+RECURRING_KEYWORDS = {
+    "CURSOR": ("Cursor", "Software/Tech"),
+    "COMCAST": ("Comcast", "Utilities"),
+    "DISNEYPLUS": ("Disney+", "Utilities"),
+    "DISNEY+": ("Disney+", "Utilities"),
+    "MINT MOBILE": ("Mint Mobile", "Utilities"),
+    "APPLE.COM/BILL": ("Apple Services", "Software/Tech"),
+    "FIRST EQUITY": ("Rent (First Equity)", "Housing/Rent"),
+    "NETFLIX": ("Netflix", "Software/Tech"),
+}
 
-def _build_dashboard(transactions: List[Dict]) -> Dict:
-    """Build all dashboard aggregates from raw transactions"""
-    # Monthly data
-    months: Dict[str, Dict] = {}
-    cat_fields = list(CATEGORY_KEY_MAP.values())
 
-    for t in transactions:
-        mk = _month_key(t.get('date', ''))
-        txn_type = t.get('transaction_type', '')
-        category = t.get('category', 'Other')
-        amount = t.get('amount', 0) or 0
+@require_auth
+def get_dashboard_data(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    GET /v1/bank-statements/dashboard
+    Returns pre-aggregated dashboard data using SQL GROUP BY queries.
+    Pushes heavy aggregation into DuckDB engine instead of Python loops.
+    """
+    db = context['db']
+    user_id = get_user_id(event) or 'local-dev-user'
 
-        if mk not in months:
-            months[mk] = {"month": mk, "income": 0, "expenses": 0, "net": 0}
+    try:
+        # 1. Monthly aggregation via SQL GROUP BY
+        monthly_sql = f"""
+            SELECT
+                strftime(CAST(date AS DATE), '%b %Y') AS month,
+                strftime(CAST(date AS DATE), '%Y-%m') AS month_sort,
+                SUM(CASE WHEN transaction_type = 'income' THEN amount ELSE 0 END) AS income,
+                SUM(CASE WHEN transaction_type = 'expense' THEN ABS(amount) ELSE 0 END) AS expenses,
+                SUM(CASE WHEN transaction_type = 'refund' THEN ABS(amount) ELSE 0 END) AS refunds,
+                SUM(CASE WHEN transaction_type = 'expense' AND category = 'Housing/Rent' THEN ABS(amount) ELSE 0 END) AS housing,
+                SUM(CASE WHEN transaction_type = 'expense' AND category = 'Groceries' THEN ABS(amount) ELSE 0 END) AS groceries,
+                SUM(CASE WHEN transaction_type = 'expense' AND category = 'Dining' THEN ABS(amount) ELSE 0 END) AS dining,
+                SUM(CASE WHEN transaction_type = 'expense' AND category = 'Shopping' THEN ABS(amount) ELSE 0 END) AS shopping,
+                SUM(CASE WHEN transaction_type = 'expense' AND category = 'Software/Tech' THEN ABS(amount) ELSE 0 END) AS software,
+                SUM(CASE WHEN transaction_type = 'expense' AND category = 'Gas/Fuel' THEN ABS(amount) ELSE 0 END) AS gas,
+                SUM(CASE WHEN transaction_type = 'expense' AND category = 'Medical' THEN ABS(amount) ELSE 0 END) AS medical,
+                SUM(CASE WHEN transaction_type = 'expense' AND category = 'Insurance' THEN ABS(amount) ELSE 0 END) AS insurance,
+                SUM(CASE WHEN transaction_type = 'expense' AND category = 'Utilities' THEN ABS(amount) ELSE 0 END) AS utilities,
+                SUM(CASE WHEN transaction_type = 'expense' AND category = 'Auto' THEN ABS(amount) ELSE 0 END) AS auto,
+                SUM(CASE WHEN transaction_type = 'expense' AND category = 'Personal Care' THEN ABS(amount) ELSE 0 END) AS personal_care,
+                SUM(CASE WHEN transaction_type = 'expense' AND category = 'Education' THEN ABS(amount) ELSE 0 END) AS education,
+                SUM(CASE WHEN transaction_type = 'expense' AND category = 'Charity' THEN ABS(amount) ELSE 0 END) AS charity,
+                SUM(CASE WHEN transaction_type = 'expense' AND category = 'Zelle Send' THEN ABS(amount) ELSE 0 END) AS zelle_send,
+                SUM(CASE WHEN transaction_type = 'expense' AND category = 'Fees' THEN ABS(amount) ELSE 0 END) AS fees,
+                SUM(CASE WHEN transaction_type = 'expense' AND category = 'Other' THEN ABS(amount) ELSE 0 END) AS other
+            FROM app_bank_transactions
+            WHERE user_id = '{user_id}'
+            GROUP BY month, month_sort
+            ORDER BY month_sort ASC
+        """
+        monthly_result = db.execute_sql(monthly_sql)
+        monthly_rows = monthly_result.get('data', {}).get('records', [])
+
+        if not monthly_rows:
+            return respond(200, {"transactions": [], "monthlyData": [], "dateRange": None})
+
+        # Build monthly data from SQL results
+        cat_fields = list(CATEGORY_KEY_MAP.values())
+        monthly_data = []
+        for row in monthly_rows:
+            m = {"month": row.get("month", "")}
+            income = float(row.get("income", 0) or 0)
+            refunds = float(row.get("refunds", 0) or 0)
+            expenses_total = 0
             for cf in cat_fields:
-                months[mk][cf] = 0
+                val = max(0, round(float(row.get(cf, 0) or 0), 2))
+                m[cf] = val
+                expenses_total += val
+            # Subtract refunds from expenses
+            m["expenses"] = round(max(0, expenses_total - refunds), 2)
+            m["income"] = round(income, 2)
+            m["net"] = round(income - m["expenses"], 2)
+            monthly_data.append(m)
 
-        m = months[mk]
-        if txn_type == 'income':
-            m['income'] += amount
-        elif txn_type in ('expense', 'refund'):
-            abs_amt = abs(amount)
-            cat_key = CATEGORY_KEY_MAP.get(category, 'other')
-            if txn_type == 'expense':
-                m['expenses'] += abs_amt
-                m[cat_key] = m.get(cat_key, 0) + abs_amt
-            else:
-                m['expenses'] -= abs_amt
-                m[cat_key] = max(0, m.get(cat_key, 0) - abs_amt)
+        # 2. Category totals via SQL
+        category_sql = f"""
+            SELECT category, ROUND(SUM(ABS(amount)), 2) AS total
+            FROM app_bank_transactions
+            WHERE user_id = '{user_id}' AND transaction_type = 'expense'
+            GROUP BY category
+            ORDER BY total DESC
+        """
+        cat_result = db.execute_sql(category_sql)
+        cat_rows = cat_result.get('data', {}).get('records', [])
+        category_totals = [
+            {"name": r["category"], "amount": float(r.get("total", 0) or 0), "color": CATEGORY_COLORS.get(r["category"], "#6b7280")}
+            for r in cat_rows if float(r.get("total", 0) or 0) > 0
+        ]
 
-    # Sort months chronologically and round
-    def month_sort_key(mk):
-        try:
-            return datetime.strptime('1 ' + mk, '1 %b %Y')
-        except ValueError:
-            return datetime.min
+        # 3. Outflow by month via SQL
+        outflow_sql = f"""
+            SELECT
+                strftime(CAST(date AS DATE), '%b %Y') AS month,
+                strftime(CAST(date AS DATE), '%Y-%m') AS month_sort,
+                ROUND(SUM(ABS(amount)), 2) AS total,
+                ROUND(SUM(CASE WHEN transaction_type = 'transfer' AND (UPPER(description) LIKE '%FID BKG SVC%' OR UPPER(description) LIKE '%ROBINHOOD%') THEN ABS(amount) ELSE 0 END), 2) AS investments,
+                ROUND(SUM(CASE WHEN transaction_type = 'transfer' AND (UPPER(description) LIKE '%APPLECARD%' OR UPPER(description) LIKE '%CHASE CREDIT%' OR UPPER(description) LIKE '%DISCOVER%' OR UPPER(description) LIKE '%PAYMENT THANK%') THEN ABS(amount) ELSE 0 END), 2) AS card_payments,
+                ROUND(SUM(CASE WHEN category = 'Housing/Rent' THEN ABS(amount) ELSE 0 END), 2) AS rent,
+                ROUND(SUM(CASE WHEN category = 'Zelle Send' THEN ABS(amount) ELSE 0 END), 2) AS zelle,
+                ROUND(SUM(CASE WHEN transaction_type = 'expense' AND category NOT IN ('Housing/Rent', 'Zelle Send') THEN ABS(amount) ELSE 0 END), 2) AS expenses,
+                ROUND(SUM(CASE WHEN transaction_type = 'transfer' AND NOT (UPPER(description) LIKE '%FID BKG SVC%' OR UPPER(description) LIKE '%ROBINHOOD%' OR UPPER(description) LIKE '%APPLECARD%' OR UPPER(description) LIKE '%CHASE CREDIT%' OR UPPER(description) LIKE '%DISCOVER%' OR UPPER(description) LIKE '%PAYMENT THANK%') THEN ABS(amount) ELSE 0 END), 2) AS other_transfers
+            FROM app_bank_transactions
+            WHERE user_id = '{user_id}' AND amount < 0
+            GROUP BY month, month_sort
+            ORDER BY month_sort ASC
+        """
+        outflow_result = db.execute_sql(outflow_sql)
+        outflow_rows = outflow_result.get('data', {}).get('records', [])
+        outflow_by_month = [{
+            "month": r.get("month", ""),
+            "investments": float(r.get("investments", 0) or 0),
+            "cardPayments": float(r.get("card_payments", 0) or 0),
+            "rent": float(r.get("rent", 0) or 0),
+            "zelle": float(r.get("zelle", 0) or 0),
+            "expenses": float(r.get("expenses", 0) or 0),
+            "otherTransfers": float(r.get("other_transfers", 0) or 0),
+            "total": float(r.get("total", 0) or 0),
+        } for r in outflow_rows]
 
-    monthly_data = sorted(months.values(), key=lambda m: month_sort_key(m['month']))
-    for m in monthly_data:
-        for cf in cat_fields:
-            m[cf] = max(0, round(m.get(cf, 0), 2))
-        m['expenses'] = round(sum(m.get(cf, 0) for cf in cat_fields), 2)
-        m['net'] = round(m['income'] - m['expenses'], 2)
-        m['income'] = round(m['income'], 2)
+        # 4. Recurring detection via SQL GROUP BY
+        recurring_sql = f"""
+            SELECT
+                description,
+                category,
+                COUNT(*) AS occurrences,
+                ROUND(AVG(ABS(amount)), 2) AS avg_amount,
+                MIN(date) AS first_date,
+                MAX(date) AS last_date
+            FROM app_bank_transactions
+            WHERE user_id = '{user_id}' AND transaction_type = 'expense'
+            GROUP BY description, category
+            HAVING COUNT(*) >= 2
+            ORDER BY avg_amount DESC
+        """
+        recurring_result = db.execute_sql(recurring_sql)
+        recurring_rows = recurring_result.get('data', {}).get('records', [])
+        recurring_items = _build_recurring_from_sql(recurring_rows)
 
-    # Category totals
-    category_totals = []
-    for cat in EXPENSE_CATEGORIES:
-        cat_key = CATEGORY_KEY_MAP.get(cat, 'other')
-        total = sum(m.get(cat_key, 0) for m in monthly_data)
-        if total > 0:
-            category_totals.append({
-                "name": cat,
-                "amount": round(total, 2),
-                "color": CATEGORY_COLORS.get(cat, "#6b7280"),
-            })
-    category_totals.sort(key=lambda c: c['amount'], reverse=True)
+        # 5. Date range via SQL MIN/MAX
+        range_sql = f"SELECT MIN(date) AS start_date, MAX(date) AS end_date FROM app_bank_transactions WHERE user_id = '{user_id}'"
+        range_result = db.execute_sql(range_sql)
+        range_rows = range_result.get('data', {}).get('records', [])
+        date_range = None
+        if range_rows:
+            date_range = {"start": range_rows[0].get("start_date", ""), "end": range_rows[0].get("end_date", "")}
 
-    # Outflow by month
-    outflow_by_month = []
-    for t_month_data in monthly_data:
-        mk = t_month_data['month']
-        of = {"month": mk, "investments": 0, "cardPayments": 0, "rent": 0, "expenses": 0, "zelle": 0, "otherTransfers": 0, "total": 0}
-        for t in transactions:
-            if _month_key(t.get('date', '')) != mk or (t.get('amount', 0) or 0) >= 0:
-                continue
-            abs_amt = abs(t.get('amount', 0))
-            txn_type = t.get('transaction_type', '')
-            category = t.get('category', '')
-            desc_upper = (t.get('description', '') or '').upper()
+        # 6. Fetch transactions for frontend drill-down (still needed for transaction list tab)
+        txn_sql = f"""
+            SELECT date, description, merchant, amount, category, source_account, transaction_type
+            FROM app_bank_transactions
+            WHERE user_id = '{user_id}'
+            ORDER BY date DESC
+        """
+        txn_result = db.execute_sql(txn_sql)
+        txn_rows = txn_result.get('data', {}).get('records', [])
 
-            if txn_type == 'transfer':
-                if any(kw in desc_upper for kw in ['FID BKG SVC', 'ROBINHOOD']):
-                    of['investments'] += abs_amt
-                elif any(kw in desc_upper for kw in ['APPLECARD', 'CHASE CREDIT', 'DISCOVER', 'PAYMENT THANK']):
-                    of['cardPayments'] += abs_amt
-                else:
-                    of['otherTransfers'] += abs_amt
-            elif category == 'Housing/Rent':
-                of['rent'] += abs_amt
-            elif category == 'Zelle Send':
-                of['zelle'] += abs_amt
-            elif txn_type == 'expense':
-                of['expenses'] += abs_amt
-            of['total'] += abs_amt
+        return respond(200, {
+            "monthlyData": monthly_data,
+            "categoryTotals": category_totals,
+            "recurringItems": recurring_items,
+            "accountBalances": {"bofaChecking": 0, "sofiSavings": 0, "asOf": date_range["end"] if date_range else ""},
+            "incomeByMonth": [],
+            "outflowByMonth": outflow_by_month,
+            "investmentSummary": {"totalInvested": 0, "byDestination": [], "count": 0},
+            "dateRange": date_range,
+            "transactions": [{
+                "date": t.get("date", ""),
+                "description": t.get("description", ""),
+                "merchant": t.get("merchant", ""),
+                "amount": t.get("amount", 0),
+                "category": t.get("category", ""),
+                "sourceAccount": t.get("source_account", ""),
+                "transactionType": t.get("transaction_type", ""),
+            } for t in txn_rows],
+        })
 
-        for k in of:
-            if k != 'month':
-                of[k] = round(of[k], 2)
-        outflow_by_month.append(of)
-
-    # Recurring items
-    recurring = _build_recurring(transactions)
-
-    # Date range
-    dates = sorted(t.get('date', '') for t in transactions if t.get('date'))
-    date_range = {"start": dates[0], "end": dates[-1]} if dates else None
-
-    # Account balances (from latest data)
-    account_balances = {"bofaChecking": 0, "sofiSavings": 0, "asOf": dates[-1] if dates else ""}
-
-    # Return full dashboard payload — transactions included for frontend drill-down
-    return {
-        "monthlyData": monthly_data,
-        "categoryTotals": category_totals,
-        "recurringItems": recurring,
-        "accountBalances": account_balances,
-        "incomeByMonth": [],  # Computed client-side from transactions
-        "outflowByMonth": outflow_by_month,
-        "investmentSummary": {"totalInvested": 0, "byDestination": [], "count": 0},
-        "dateRange": date_range,
-        "transactions": [{
-            "date": t.get("date", ""),
-            "description": t.get("description", ""),
-            "merchant": t.get("merchant", ""),
-            "amount": t.get("amount", 0),
-            "category": t.get("category", ""),
-            "sourceAccount": t.get("source_account", ""),
-            "transactionType": t.get("transaction_type", ""),
-        } for t in transactions],
-    }
+    except Exception as e:
+        print(f"Error building dashboard: {e}")
+        return respond(500, {"error": str(e)})
 
 
-def _build_recurring(transactions: List[Dict]) -> List[Dict]:
-    """Detect recurring charges"""
-    recurring_kw = {
-        "CURSOR": ("Cursor", "Software/Tech"),
-        "COMCAST": ("Comcast", "Utilities"),
-        "DISNEYPLUS": ("Disney+", "Utilities"),
-        "DISNEY+": ("Disney+", "Utilities"),
-        "MINT MOBILE": ("Mint Mobile", "Utilities"),
-        "APPLE.COM/BILL": ("Apple Services", "Software/Tech"),
-        "FIRST EQUITY": ("Rent (First Equity)", "Housing/Rent"),
-        "NETFLIX": ("Netflix", "Software/Tech"),
-    }
+def _build_recurring_from_sql(recurring_rows: List[Dict]) -> List[Dict]:
+    """Build recurring items from SQL GROUP BY results"""
+    result = []
+    for row in recurring_rows:
+        desc = (row.get("description", "") or "").upper()
+        occurrences = int(row.get("occurrences", 0) or 0)
+        avg_amount = float(row.get("avg_amount", 0) or 0)
+        first_date = row.get("first_date", "")
+        last_date = row.get("last_date", "")
 
-    groups: Dict[str, Dict] = {}
-    for t in transactions:
-        if t.get('transaction_type') != 'expense':
-            continue
-        upper = (t.get('description', '') or '').upper()
-        for kw, (name, cat) in recurring_kw.items():
-            if kw in upper:
-                if name not in groups:
-                    groups[name] = {"amounts": [], "dates": [], "category": cat}
-                groups[name]["amounts"].append(abs(t.get('amount', 0)))
-                groups[name]["dates"].append(t.get('date', ''))
+        # Match against known recurring keywords
+        matched_name = None
+        matched_type = None
+        for kw, (name, cat) in RECURRING_KEYWORDS.items():
+            if kw in desc:
+                matched_name = name
+                matched_type = cat
                 break
 
-    result = []
-    for merchant, data in groups.items():
-        if len(data["amounts"]) < 2:
+        if not matched_name:
             continue
-        avg = sum(data["amounts"]) / len(data["amounts"])
-        sorted_dates = sorted(data["dates"])
-        total_days = 0
-        for i in range(1, len(sorted_dates)):
-            try:
-                d1 = datetime.strptime(sorted_dates[i-1], '%Y-%m-%d')
-                d2 = datetime.strptime(sorted_dates[i], '%Y-%m-%d')
-                total_days += (d2 - d1).days
-            except ValueError:
-                pass
-        avg_days = total_days / (len(sorted_dates) - 1) if len(sorted_dates) > 1 else 30
+
+        # Estimate cadence from date spread
+        try:
+            d1 = datetime.strptime(first_date, '%Y-%m-%d')
+            d2 = datetime.strptime(last_date, '%Y-%m-%d')
+            span_days = (d2 - d1).days
+            avg_days = span_days / (occurrences - 1) if occurrences > 1 else 30
+        except (ValueError, TypeError):
+            avg_days = 30
+
         cadence = "yearly" if avg_days > 300 else "quarterly" if avg_days > 50 else "monthly"
         result.append({
-            "merchant": merchant,
+            "merchant": matched_name,
             "cadence": cadence,
-            "type": data["category"],
-            "avgAmount": round(avg, 2),
+            "type": matched_type,
+            "avgAmount": round(avg_amount, 2),
         })
+
     result.sort(key=lambda r: r['avgAmount'], reverse=True)
     return result
