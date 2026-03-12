@@ -125,7 +125,7 @@ def get_analysis_status(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # IbexDB updates create new version rows (append-only), so ORDER BY updated_at DESC
         # and LIMIT 1 gets the latest version.
         sql = (
-            "SELECT id, user_id, status, category, error, created_at, updated_at "
+            "SELECT id, user_id, status, category, error_message, created_at, updated_at "
             "FROM app_pending_analyses "
             f"WHERE id = '{entry_id}' AND user_id = '{user_id}' "
             "ORDER BY updated_at DESC LIMIT 1"
@@ -167,7 +167,7 @@ def get_analysis_status(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     response['result'] = workout_result['data']['records'][0]
 
         elif status == 'failed':
-            response['error'] = record.get('error')
+            response['error'] = record.get('error_message') or record.get('error')
 
         logger.info(f"Query result - status: {status}")
         return respond(200, response)
@@ -299,7 +299,7 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
                          ],
                          updates={
                              "status": "storage_failed",
-                             "error": f"Storage failed: {str(storage_error)}",
+                             "error_message": f"Storage failed: {str(storage_error)}",
                              "category": category,
                              "failed_at": datetime.utcnow().isoformat(),
                              "updated_at": datetime.utcnow().isoformat()
@@ -337,7 +337,7 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
                      ],
                      updates={
                          "status": "failed",
-                         "error": error_msg,
+                         "error_message": error_msg,
                          "failed_at": datetime.utcnow().isoformat(),
                          "updated_at": datetime.utcnow().isoformat()
                      })
@@ -357,7 +357,7 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
                          ],
                          updates={
                              "status": "failed",
-                             "error": str(e),
+                             "error_message": str(e),
                              "failed_at": datetime.utcnow().isoformat()
                          })
         except:
