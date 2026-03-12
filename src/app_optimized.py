@@ -12,14 +12,7 @@ from typing import Dict, Any
 sys.path.append(os.path.dirname(os.path.realpath(__file__)))
 
 # Import core services
-try:
-    # Try to use optimized client
-    from lib.ibex_client_optimized import OptimizedIbexClient as IbexClient
-    print("Using OptimizedIbexClient with caching")
-except ImportError:
-    # Fallback to original client
-    from lib.ibex_client import IbexClient
-    print("Using standard IbexClient")
+from lib.ibex_client_optimized import OptimizedIbexClient as IbexClient
 
 from lib.ai_optimized import OptimizedAIService
 from lib.tenant_manager import TenantManager
@@ -94,14 +87,13 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     message_body = json.loads(first_record.get('body', '{}'))
                     # Get tenant info from message payload
                     tenant_config = {
-                        'tenant_id': message_body.get('tenant_id', 'default'),
+                        'tenant_id': message_body.get('tenant_id', 'nutriwealth'),
                         'namespace': message_body.get('namespace', 'default')
                     }
                 except Exception as e:
                     logger.warning(f"Could not extract tenant from SQS message: {e}")
-                    # Fallback to default if message parsing fails
                     tenant_config = {
-                        'tenant_id': 'default',
+                        'tenant_id': 'nutriwealth',
                         'namespace': 'default'
                     }
 
@@ -129,12 +121,6 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
         # Create tenant-specific database client
         tenant_db = TenantManager.create_ibex_client(tenant_config, client_class=IbexClient)
-        
-        # Enable direct Lambda invocation if configured
-        lambda_name = os.environ.get('IBEX_LAMBDA_NAME') or os.environ.get('AWS_LAMBDA_FUNCTION_NAME')
-        if hasattr(tenant_db, 'enable_direct_lambda') and lambda_name:
-            tenant_db.enable_direct_lambda(lambda_name)
-            logger.info(f"Direct Lambda invocation enabled for: {lambda_name}")
 
         # If user_id is provided and we have OptimizedIbexClient, prefetch user data
         if user_id and hasattr(tenant_db, 'prefetch_user_data'):

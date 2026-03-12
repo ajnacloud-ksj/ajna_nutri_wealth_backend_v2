@@ -2,13 +2,11 @@ import json
 import os
 import uuid
 from datetime import datetime
-from typing import Dict, Any, Optional, Optional
+from typing import Dict, Any, Optional
 
 from src.lib.auth_provider import get_user_id, require_auth
 from ajna_cloud import logger, respond
-from src.config.settings import settings
 from src.lib.ai_optimized import OptimizedAIService
-from src.lib.ibex_client_optimized import OptimizedIbexClient as IbexClient
 import boto3
 
 @require_auth
@@ -57,30 +55,16 @@ def submit_analysis(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         queue_url = os.environ.get('ANALYSIS_QUEUE_URL',
                                    'https://sqs.ap-south-1.amazonaws.com/808527335982/nutriwealth-analysis-queue')
 
-        # Only send minimal data in SQS message
-        # The image_url is already stored in the database
+        # SQS message: only identifiers needed.
+        # Image URL and description are in app_pending_analyses record.
+        # Tenant context is resolved by app_optimized.py when processing SQS messages.
         message = {
             "source": "sqs-processing",
             "entry_id": entry_id,
             "user_id": user_id,
-            "description": description,
-            # DO NOT send image_url in SQS - it's already in the database!
-            # The processor will retrieve it from pending_analyses table
-            # Add IBEX credentials to ensure async processor can access DB
-            # CRITICAL: Must use EXACT same tenant_id as the db.write above!
-            "ibex_config": {
-                "api_url": os.environ.get('IBEX_API_URL', 'https://smartlink.ajna.cloud/ibexdb'),
-                "api_key": os.environ.get('IBEX_API_KEY'),
-                "tenant_id": current_tenant_id,  # Use same tenant_id as the WRITE
-                "namespace": current_namespace     # Use same namespace as the WRITE
-            }
+            "tenant_id": current_tenant_id,
+            "namespace": current_namespace
         }
-
-        # Add tenant context if available
-        tenant = context.get('tenant')
-        if tenant:
-            message['tenant_id'] = tenant.get('tenant_id')
-            message['namespace'] = tenant.get('namespace')
 
         # Send message to SQS
         sqs_response = sqs.send_message(
@@ -126,73 +110,70 @@ def get_analysis_status(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
         db = context.get('db')
         
-        # Query pending_analyses table with retry logic for cache consistency
-        # IMPORTANT: use_cache=False to get latest data after UPDATE operations
         logger.info(f"Checking status for entry_id: {entry_id}, user_id: {user_id}")
 
-        # Try up to 3 times with small delay to handle cache lag
-        record = None
-        for attempt in range(3):
-            result = db.query("app_pending_analyses",
-                             filters=[
-                                 {"field": "id", "operator": "eq", "value": entry_id},
-                                 {"field": "user_id", "operator": "eq", "value": user_id}
-                             ],
-                             limit=1,
-                             use_cache=False,  # Critical: Bypass cache to get latest version
-                             include_deleted=False)
+        # Query pending_analyses for the record
+        result = db.query("app_pending_analyses",
+                         filters=[
+                             {"field": "id", "operator": "eq", "value": entry_id},
+                             {"field": "user_id", "operator": "eq", "value": user_id}
+                         ],
+                         limit=1,
+                         use_cache=False)
 
-            if result.get('success') and result.get('data', {}).get('records'):
-                temp_record = result['data']['records'][0]
-                # If we get a newer version or completed status, use it
-                if not record or temp_record.get('_version', 0) > record.get('_version', 0) or temp_record.get('status') == 'completed':
-                    record = temp_record
-                    if record.get('status') == 'completed':
-                        break
+        if not result.get('success') or not result.get('data', {}).get('records'):
+            return respond(404, {"error": "Analysis not found"})
 
-            # Small delay between attempts to allow cache to refresh
-            if attempt < 2:
-                import time
-                time.sleep(0.5)
+        record = result['data']['records'][0]
+        status = record.get('status', 'pending')
 
-        logger.info(f"Query result - found: {bool(record)}, status: {record.get('status') if record else 'N/A'}")
+        # IbexDB update operations may not reflect immediately in queries.
+        # If status is still "pending", check the result tables directly.
+        if status == 'pending':
+            for table, category in [
+                ("app_food_entries_v2", "food"),
+                ("app_receipts", "receipt"),
+                ("app_workouts", "workout")
+            ]:
+                check = db.query(table,
+                                filters=[{"field": "id", "operator": "eq", "value": entry_id}],
+                                limit=1, use_cache=False)
+                logger.info(f"Result table check: {table} -> success={check.get('success')}, records={len(check.get('data', {}).get('records', []))}")
+                if check.get('success') and check.get('data', {}).get('records'):
+                    status = "completed"
+                    record['category'] = category
+                    logger.info(f"Found completed result in {table}")
+                    break
 
-        if record:
-            status = record.get('status', 'pending')
-            
-            response = {
-                "id": entry_id,
-                "status": status,
-                "created_at": record.get('created_at'),
-                "updated_at": record.get('updated_at', record.get('created_at'))
-            }
-            
-            # If completed or failed, add result/error
-            if status == 'completed':
-                # Fetch actual result based on category if not in analysis record
-                category = record.get('category', 'food')
-                response['category'] = category
-                
-                if category == 'food':
-                     food_result = db.query("app_food_entries_v2",
-                                          filters=[{"field": "id", "operator": "eq", "value": entry_id}],
-                                          limit=1)
-                     if food_result.get('success') and food_result.get('data', {}).get('records'):
-                         response['result'] = food_result['data']['records'][0]
-                
-                elif category == 'receipt':
-                    receipt_result = db.query("app_receipts", 
-                                            filters=[{"field": "id", "operator": "eq", "value": entry_id}],
-                                            limit=1)
-                    if receipt_result.get('success') and receipt_result.get('data', {}).get('records'):
-                        response['result'] = receipt_result['data']['records'][0]
+        response = {
+            "id": entry_id,
+            "status": status,
+            "created_at": record.get('created_at'),
+            "updated_at": record.get('updated_at', record.get('created_at'))
+        }
 
-            elif status == 'failed':
-                response['error'] = record.get('error')
+        if status == 'completed':
+            category = record.get('category', 'food')
+            response['category'] = category
 
-            return respond(200, response)
-            
-        return respond(404, {"error": "Analysis not found"})
+            if category == 'food':
+                food_result = db.query("app_food_entries_v2",
+                                      filters=[{"field": "id", "operator": "eq", "value": entry_id}],
+                                      limit=1)
+                if food_result.get('success') and food_result.get('data', {}).get('records'):
+                    response['result'] = food_result['data']['records'][0]
+            elif category == 'receipt':
+                receipt_result = db.query("app_receipts",
+                                        filters=[{"field": "id", "operator": "eq", "value": entry_id}],
+                                        limit=1)
+                if receipt_result.get('success') and receipt_result.get('data', {}).get('records'):
+                    response['result'] = receipt_result['data']['records'][0]
+
+        elif status == 'failed':
+            response['error'] = record.get('error')
+
+        logger.info(f"Query result - found: True, status: {status}")
+        return respond(200, response)
 
     except Exception as e:
         logger.error(f"Error getting analysis status: {e}")
@@ -253,34 +234,14 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
 
         logger.info("Starting async analysis", extra={'entry_id': entry_id, 'user_id': user_id})
 
-        # Initialize services
-        # Note: We create new instances because context might not be fully populated in async event
-        from src.config.settings import settings
-        db_config = settings.config.database
+        # Get db from context — app_optimized.py sets this up with correct tenant for SQS path
+        ctx = context if isinstance(context, dict) else {}
+        db = ctx.get('db')
+        if not db:
+            raise RuntimeError("No database client in context. SQS handler must provide context['db'].")
 
-        # Get IBEX config from payload (passed from submit_analysis)
-        ibex_config = payload.get('ibex_config', {})
-
-        # Use credentials from payload, fallback to environment/settings
-        api_url = ibex_config.get('api_url') or os.environ.get('IBEX_API_URL') or db_config.api_url
-        api_key = ibex_config.get('api_key') or os.environ.get('IBEX_API_KEY') or db_config.api_key
-        final_tenant_id = ibex_config.get('tenant_id') or payload.get('tenant_id') or db_config.tenant_id
-        final_namespace = ibex_config.get('namespace') or payload.get('namespace') or db_config.namespace
-
-        db = IbexClient(
-            api_url=api_url,
-            api_key=api_key,
-            tenant_id=final_tenant_id,
-            namespace=final_namespace
-        )
-
-        logger.info(f"Async processor using IBEX at {api_url} with tenant={final_tenant_id}, namespace={final_namespace}")
-
-        # Enable Direct Lambda invocation to avoid 403 errors
-        lambda_name = os.environ.get('IBEX_LAMBDA_NAME') or 'ibex-db-lambda'
-        if hasattr(db, 'enable_direct_lambda') and lambda_name:
-            db.enable_direct_lambda(lambda_name)
-            logger.info(f"Direct Lambda invocation enabled for async processing: {lambda_name}")
+        tenant_info = ctx.get('tenant', {})
+        logger.info(f"Async processor using tenant={tenant_info.get('tenant_id')}, namespace={tenant_info.get('namespace')}")
 
         # Retrieve the full record from pending_analyses to get image_url and description
         logger.info(f"Retrieving pending analysis record for entry_id={entry_id}")
@@ -349,47 +310,25 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
                 # Don't continue to mark as completed if storage failed
                 return {"statusCode": 500, "body": json.dumps({"success": False, "error": f"Storage failed: {str(storage_error)}"})}
 
-            # Update pending_analyses status - only if storage succeeded
-            logger.info(f"Updating status for entry_id={entry_id}, user_id={user_id}")
-            logger.info(f"Using tenant={final_tenant_id}, namespace={final_namespace}")
+            # Update pending_analyses status to completed
+            logger.info(f"Updating status to completed for entry_id={entry_id}")
+            update_result = db.update("app_pending_analyses",
+                                     filters=[
+                                         {"field": "id", "operator": "eq", "value": entry_id},
+                                         {"field": "user_id", "operator": "eq", "value": user_id}
+                                     ],
+                                     updates={
+                                         "status": "completed",
+                                         "category": category,
+                                         "completed_at": datetime.utcnow().isoformat(),
+                                         "updated_at": datetime.utcnow().isoformat()
+                                     })
 
-            # First, verify the record exists before updating
-            check_result = db.query("app_pending_analyses",
-                                   filters=[
-                                       {"field": "id", "operator": "eq", "value": entry_id},
-                                       {"field": "user_id", "operator": "eq", "value": user_id}
-                                   ],
-                                   limit=1)
-
-            if check_result.get('success') and check_result.get('data', {}).get('records'):
-                existing_record = check_result['data']['records'][0]
-                logger.info(f"Found pending record to update: {existing_record}")
-
-                # Use UPDATE - now fixed in IBEX and working properly!
-                # UPDATE creates proper version records and maintains data integrity
-                logger.info(f"Updating status using UPDATE for entry {entry_id}")
-
-                update_result = db.update("app_pending_analyses",
-                                        filters=[
-                                            {"field": "id", "operator": "eq", "value": entry_id},
-                                            {"field": "user_id", "operator": "eq", "value": user_id}
-                                        ],
-                                        updates={
-                                            "status": "completed",
-                                            "category": category,
-                                            "completed_at": datetime.utcnow().isoformat(),
-                                            "updated_at": datetime.utcnow().isoformat()
-                                        })
-
-                if update_result.get('success'):
-                    logger.info(f"Status updated to completed for entry {entry_id}")
-                else:
-                    logger.error(f"Failed to update status for {entry_id}: {update_result.get('error')}")
-
+            if update_result.get('success'):
+                logger.info(f"Status updated to completed for entry {entry_id}")
             else:
-                logger.error(f"Could not find pending record for entry_id={entry_id}, user_id={user_id}")
-                logger.error(f"Query result: {json.dumps(check_result)}")
-            
+                logger.error(f"Failed to update status for {entry_id}: {update_result.get('error')}")
+
             logger.info("Async analysis completed successfully", extra={'entry_id': entry_id})
         else:
             error_msg = result.get('error', 'Unknown error')
@@ -516,41 +455,11 @@ def _store_food_result(db, user_id: str, entry_id: str, data: Dict, image_url: s
                 else:
                     logger.error(f"Failed to store food items for {entry_id}: {items_write.get('error')}")
 
-            # Verify the write was successful by querying back
-            verify_result = db.query("app_food_entries_v2",
-                                    filters=[
-                                        {"field": "id", "operator": "eq", "value": entry_id}
-                                    ],
-                                    limit=1)
-
-            if verify_result.get('success') and verify_result.get('data', {}).get('records'):
-                logger.info(f"✅ Verified: Food entry {entry_id} exists in database")
-            else:
-                logger.error(f"⚠️ Warning: Food entry {entry_id} not found after write - may have failed silently")
-                # Try to write again using a different approach
-                logger.info(f"Attempting retry with upsert for entry {entry_id}")
-                retry_result = db.upsert("app_food_entries_v2", [food_entry], conflict_fields=["id"])
-                if retry_result.get('success'):
-                    logger.info(f"✅ Retry successful: Food entry {entry_id} stored on second attempt")
-                else:
-                    logger.error(f"❌ Retry failed: {retry_result.get('error')}")
-                    raise Exception(f"Failed to store food entry after retry: {retry_result.get('error')}")
-
             return True
         else:
             error_msg = result.get('error', 'Unknown error during write')
-            logger.error(f"❌ Failed to store food entry {entry_id}: {error_msg}")
-
-            # Try upsert as fallback
-            logger.info(f"Attempting upsert as fallback for entry {entry_id}")
-            upsert_result = db.upsert("app_food_entries_v2", [food_entry], conflict_fields=["id"])
-
-            if upsert_result.get('success'):
-                logger.info(f"✅ Upsert successful: Food entry {entry_id} stored via fallback")
-                return True
-            else:
-                logger.error(f"❌ Upsert also failed: {upsert_result.get('error')}")
-                raise Exception(f"Failed to store food entry: {error_msg}")
+            logger.error(f"Failed to store food entry {entry_id}: {error_msg}")
+            raise Exception(f"Failed to store food entry: {error_msg}")
 
     except Exception as e:
         logger.error(f"❌ Critical error in _store_food_result for entry {entry_id}: {str(e)}", exc_info=True)

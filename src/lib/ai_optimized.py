@@ -23,7 +23,6 @@ class OptimizedAIService:
         self.model_manager = get_model_manager(db_client)
         self._clients = {}  # Cache clients by provider
 
-        # Default fallback
         self.default_model_config = self.model_manager.get_model_config("food")
         
         # Option to skip classification for better performance
@@ -40,11 +39,6 @@ class OptimizedAIService:
         provider_config = self.model_manager.get_provider_config(provider)
         base_url = provider_config.get("base_url")
         
-        if not api_key:
-            logger.warning(f"No API key found for provider {provider}, falling back to OpenAI defaults if possible")
-            # Try getting OPENAI_API_KEY explicitly as last resort
-            api_key = os.environ.get("OPENAI_API_KEY")
-            
         if not api_key:
              raise ValueError(f"API key required for provider {provider}")
 
@@ -121,18 +115,11 @@ Return ONLY a JSON object with:
                 "text": f"Description: {description}"
             })
 
-        # Add image if provided
-        if image_url and not image_url.startswith('uploads/'):
-            # Only include if it's a direct URL (not a file key)
+        # Add image if provided (should already be resolved to presigned URL by caller)
+        if image_url:
             user_content.append({
                 "type": "image_url",
                 "image_url": {"url": image_url}
-            })
-        elif image_url:
-            # If it's a file key, add text description
-            user_content.append({
-                "type": "text",
-                "text": "Note: An image was uploaded but not directly accessible for classification."
             })
 
         # Add instruction
@@ -173,22 +160,7 @@ Return ONLY a JSON object with:
 
         except Exception as e:
             logger.error(f"Classification failed: {e}")
-            # Fallback to keyword-based classification
-            return self._fallback_classification(description), 0.3, 0
-
-    def _fallback_classification(self, description: Optional[str]) -> str:
-        """Simple keyword-based classification as fallback"""
-        if not description:
-            return "food"
-
-        lower_desc = description.lower()
-
-        if any(w in lower_desc for w in ["receipt", "bill", "invoice", "purchase", "bought"]):
-            return "receipt"
-        if any(w in lower_desc for w in ["workout", "gym", "exercise", "training", "fitness", "ran", "lifted"]):
-            return "workout"
-
-        return "food"
+            raise
 
     def _load_prompt(self, category: str) -> Dict[str, str]:
         """Load prompt for specific category"""
@@ -296,20 +268,26 @@ Return ONLY a JSON object with:
         return f"Current UTC time: {now.strftime('%H:%M')}. Time-based meal hint: {meal_hint}. But prioritize food content over time."
 
     def _resolve_image_url(self, image_url: str) -> str:
-        """Resolve S3 key to presigned URL if needed"""
+        """Resolve S3 key to presigned download URL if needed.
+
+        Files uploaded via presigned PUT URLs go directly to S3, not through IbexDB,
+        so we generate presigned GET URLs directly via boto3.
+        """
         if not image_url or not isinstance(image_url, str):
             return image_url
 
         if image_url.startswith('uploads/'):
-            try:
-                logger.debug(f"Resolving S3 key: {image_url}")
-                res = self.db.get_download_url(image_url)
-                if res.get('success'):
-                    resolved_url = res['data']['download_url']
-                    logger.debug("Successfully resolved to presigned URL")
-                    return resolved_url
-            except Exception as e:
-                logger.error(f"Failed to resolve S3 key: {e}")
+            import boto3
+            logger.info(f"Resolving S3 key to presigned URL: {image_url}")
+            s3 = boto3.client('s3', region_name=os.environ.get('AWS_REGION', 'ap-south-1'))
+            bucket = os.environ.get('S3_BUCKET', 'nutriwealth-uploads')
+            resolved_url = s3.generate_presigned_url(
+                'get_object',
+                Params={'Bucket': bucket, 'Key': image_url},
+                ExpiresIn=3600
+            )
+            logger.info("Successfully resolved S3 key to presigned download URL")
+            return resolved_url
 
         return image_url
 
@@ -360,10 +338,6 @@ Return ONLY a JSON object with:
             # Get model config for category
             config = self.model_manager.get_model_config(category)
             
-            # If low confidence, maybe override? 
-            # Current logic: rely on Manager's config. Manager can have fallbacks.
-            # If needed, logic can check config.fallback_provider if primary fails (implemented in Manager?)
-            
             # Create client for analysis
             client = self._get_client(config.provider)
 
@@ -394,7 +368,7 @@ Return ONLY a JSON object with:
 
             content_parts = [{"type": "text", "text": full_user_prompt}]
 
-            if resolved_image_url and not resolved_image_url.startswith('uploads/'):
+            if resolved_image_url:
                 content_parts.append({
                     "type": "image_url",
                     "image_url": {"url": resolved_image_url}
