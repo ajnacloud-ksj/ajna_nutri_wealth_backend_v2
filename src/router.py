@@ -17,6 +17,7 @@ from src.handlers import database_admin  # Database setup and cleanup
 from src.handlers import shopping  # Shopping list management
 from src.handlers import analytics  # Cross-table analytics via EXECUTE_SQL
 from src.handlers import bank_statements  # Bank statement CSV upload & transactions
+from src.handlers import reconciliation  # Financial reconciliation
 # from src.handlers import user  # User profile management - COMMENTED OUT UNTIL DEPLOYED
 
 # Note: Using improved analyze handler with two-stage AI processing
@@ -61,6 +62,12 @@ ROUTES = [
     ('DELETE', r'^/v1/bank-statements/batch/(?P<batch_id>[a-zA-Z0-9-]+)$', bank_statements.delete_batch),
     ('GET', r'^/v1/bank-transactions$', bank_statements.list_transactions),
     ('GET', r'^/v1/bank-accounts$', bank_statements.list_accounts),
+
+    # Reconciliation
+    ('POST', r'^/v1/reconciliation/run$', reconciliation.run_reconciliation),
+    ('GET', r'^/v1/reconciliation/summary$', reconciliation.get_reconciliation_summary),
+    ('GET', r'^/v1/reconciliation/transfers$', reconciliation.get_transfer_matches),
+    ('GET', r'^/v1/reconciliation/receipts$', reconciliation.get_receipt_matches),
 
     # Analytics (cross-table insights via EXECUTE_SQL)
     ('GET', r'^/v1/analytics/dashboard$', analytics.dashboard_summary),
