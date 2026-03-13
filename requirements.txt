@@ -4,3 +4,4 @@ openai>=1.0.0
 sarvamai>=0.1.0
 pytz>=2023.3
 zvec>=0.2.0
+Pillow>=10.0.0

@@ -221,21 +221,49 @@ def analyze_food(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, An
         }, event=event)
 
 
+def _auto_rotate_base64(base64_image: str) -> str:
+    """Auto-rotate a base64 image based on EXIF orientation data.
+    Returns the corrected base64 data URL string."""
+    try:
+        import base64 as b64
+        from io import BytesIO
+        from PIL import Image, ImageOps
+
+        # Split data URL
+        if base64_image.startswith('data:'):
+            header, raw_data = base64_image.split(',', 1)
+        else:
+            header = 'data:image/jpeg;base64'
+            raw_data = base64_image
+
+        img_bytes = b64.b64decode(raw_data)
+        img = Image.open(BytesIO(img_bytes))
+
+        # Apply EXIF transpose (auto-rotate based on EXIF orientation tag)
+        rotated = ImageOps.exif_transpose(img)
+        if rotated is img:
+            return base64_image  # No rotation needed
+
+        # Re-encode
+        buf = BytesIO()
+        fmt = img.format or 'JPEG'
+        rotated.save(buf, format=fmt, quality=92)
+        new_data = b64.b64encode(buf.getvalue()).decode('utf-8')
+        return f"{header},{new_data}"
+    except Exception as e:
+        logger.warning(f"EXIF auto-rotate skipped: {e}")
+        return base64_image
+
+
 def _upload_base64_to_s3(db, base64_image: str, user_id: str, entry_id: str, category: str = 'receipts') -> Optional[str]:
     """
     Upload a base64 image to S3 via IbexDB and return the S3 key.
-
-    Args:
-        db: Database/storage service instance
-        base64_image: Base64 encoded image string (with or without data URL prefix)
-        user_id: User ID for tracking
-        entry_id: Entry ID for unique filename
-        category: Storage category (food, receipts, workouts)
-
-    Returns:
-        S3 key of the uploaded image or None if upload fails
+    Auto-rotates based on EXIF orientation before upload.
     """
     try:
+        # Auto-rotate based on EXIF before uploading
+        base64_image = _auto_rotate_base64(base64_image)
+
         # Extract mime type from data URL prefix if present
         if base64_image.startswith('data:'):
             header = base64_image.split(',', 1)[0]

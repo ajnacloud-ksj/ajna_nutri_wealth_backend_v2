@@ -11,11 +11,43 @@ from utils.timestamps import utc_now, utc_date
 import boto3
 
 
+def _auto_rotate_base64(base64_image: str) -> str:
+    """Auto-rotate a base64 image based on EXIF orientation data."""
+    try:
+        import base64 as b64
+        from io import BytesIO
+        from PIL import Image, ImageOps
+
+        if base64_image.startswith('data:'):
+            header, raw_data = base64_image.split(',', 1)
+        else:
+            header = 'data:image/jpeg;base64'
+            raw_data = base64_image
+
+        img_bytes = b64.b64decode(raw_data)
+        img = Image.open(BytesIO(img_bytes))
+        rotated = ImageOps.exif_transpose(img)
+        if rotated is img:
+            return base64_image
+
+        buf = BytesIO()
+        fmt = img.format or 'JPEG'
+        rotated.save(buf, format=fmt, quality=92)
+        new_data = b64.b64encode(buf.getvalue()).decode('utf-8')
+        return f"{header},{new_data}"
+    except Exception as e:
+        logger.warning(f"EXIF auto-rotate skipped: {e}")
+        return base64_image
+
+
 def _upload_image(db, image_url: str, user_id: str, entry_id: str, category: str) -> str:
-    """Upload base64 image via IbexDB engine. Returns S3 key or empty string."""
+    """Upload base64 image via IbexDB engine. Auto-rotates based on EXIF. Returns S3 key or empty string."""
     if not image_url or not image_url.startswith('data:'):
         return image_url or ''
     try:
+        # Auto-rotate based on EXIF before uploading
+        image_url = _auto_rotate_base64(image_url)
+
         # Parse data URI header for mime type and extension
         header = image_url.split(',', 1)[0]
         mime_type = header.split(':')[1].split(';')[0] if ':' in header else 'image/jpeg'

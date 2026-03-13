@@ -22,3 +22,6 @@ httpx>=0.27.2
 PyJWT>=2.8.0
 cryptography>=41.0.7
 pydantic>=2.5.0
+
+# Image processing (EXIF auto-rotation)
+Pillow>=10.0.0
