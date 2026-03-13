@@ -106,6 +106,30 @@ class ModelManager:
             timeout_seconds=30,
             cost_per_1k_tokens=0.00015,
             api_key_env="OPENAI_API_KEY"
+        ),
+        "voice_stt": ModelConfig(
+            use_case="voice_stt",
+            provider="sarvam",
+            model_name="saaras:v3",
+            base_url="https://api.sarvam.ai",
+            temperature=0.0,
+            max_tokens=0,
+            timeout_seconds=60,
+            cost_per_1k_tokens=0.0,
+            fallback_provider="openai",
+            fallback_model="whisper-1",
+            api_key_env="SARVAM_API_KEY"
+        ),
+        "voice_tts": ModelConfig(
+            use_case="voice_tts",
+            provider="sarvam",
+            model_name="bulbul:v3",
+            base_url="https://api.sarvam.ai",
+            temperature=0.0,
+            max_tokens=0,
+            timeout_seconds=30,
+            cost_per_1k_tokens=0.0,
+            api_key_env="SARVAM_API_KEY"
         )
     }
 
@@ -140,6 +164,12 @@ class ModelManager:
             "api_key_env": "TOGETHER_API_KEY",
             "supports_images": False,
             "supports_json_mode": True
+        },
+        "sarvam": {
+            "base_url": "https://api.sarvam.ai",
+            "api_key_env": "SARVAM_API_KEY",
+            "supports_images": False,
+            "supports_json_mode": False
         }
     }
 
@@ -281,7 +311,7 @@ class ModelManager:
     def get_all_configs(self) -> Dict[str, ModelConfig]:
         """Get all model configurations"""
         configs = {}
-        for use_case in ["classifier", "food", "receipt", "workout", "shopping"]:
+        for use_case in ["classifier", "food", "receipt", "workout", "shopping", "voice_stt", "voice_tts"]:
             configs[use_case] = self.get_model_config(use_case)
         return configs
 

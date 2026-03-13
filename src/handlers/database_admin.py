@@ -31,29 +31,45 @@ def setup_database(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, 
         created_tables = []
         failed_tables = []
 
-        # List of essential tables to create
+        # List of essential tables to create (must have matching schema in schemas/)
         essential_tables = [
+            # Core user & auth
             'users_v4',
             'pending_analyses',
+            # Food tracking
             'food_entries_v2',
             'food_items',
+            # Receipts
             'receipts',
             'receipt_items',
+            'receipt_item_embeddings',
+            # Workouts
             'workouts',
             'workout_exercises',
+            # Shopping
+            'shopping_lists',
+            'shopping_list_items',
+            # Banking
+            'bank_transactions',
+            'bank_accounts',
+            # AI & system
+            'ai_model_config',
+            'api_costs',
+            'api_usage_log',
+            # Media
             'images',
+            # Goals & health
             'user_goals',
             'meal_summaries',
             'health_assessments',
-            'api_costs',
-            'shopping_lists',
-            'shopping_list_items',
-            'receipt_item_embeddings',
-            'bank_transactions',
-            'bank_accounts',
+            # Notifications
+            'user_notifications',
+            # Caretaker / relationships
             'invitation_codes',
             'care_relationships',
             'participant_permissions',
+            'participant_comments',
+            'permission_requests',
             'caretaker_notes',
             'access_log',
         ]
@@ -96,6 +112,15 @@ def setup_database(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, 
                 else:
                     failed_tables.append(f"{full_table_name}: {error}")
                     logger.error(f"Failed to create table {full_table_name}: {error}")
+
+        # Seed default AI model configs
+        try:
+            from lib.model_manager import get_model_manager
+            model_mgr = get_model_manager(db)
+            model_mgr._create_default_configs()
+            logger.info("Seeded default AI model configs")
+        except Exception as e:
+            logger.warning(f"Could not seed model configs: {e}")
 
         # Create a default admin user if requested
         body = json.loads(event.get('body', '{}'))

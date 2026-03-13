@@ -4,48 +4,44 @@
             "type": "string",
             "required": true
         },
-        "use_case": {
+        "email": {
             "type": "string",
             "required": true
         },
-        "provider": {
-            "type": "string",
-            "required": true
-        },
-        "model_name": {
-            "type": "string",
-            "required": true
-        },
-        "base_url": {
+        "full_name": {
             "type": "string",
             "required": false
         },
-        "temperature": {
-            "type": "double",
-            "required": false
-        },
-        "max_tokens": {
-            "type": "integer",
-            "required": false
-        },
-        "timeout_seconds": {
-            "type": "integer",
-            "required": false
-        },
-        "cost_per_1k_tokens": {
-            "type": "double",
-            "required": false
-        },
-        "fallback_provider": {
+        "name": {
             "type": "string",
             "required": false
         },
-        "fallback_model": {
+        "role": {
             "type": "string",
             "required": false
         },
-        "is_active": {
+        "user_type": {
+            "type": "string",
+            "required": false
+        },
+        "subscription_id": {
+            "type": "string",
+            "required": false
+        },
+        "is_subscribed": {
             "type": "boolean",
+            "required": false
+        },
+        "trial_used_today": {
+            "type": "integer",
+            "required": false
+        },
+        "last_usage_date": {
+            "type": "string",
+            "required": false
+        },
+        "profile": {
+            "type": "string",
             "required": false
         },
         "created_at": {

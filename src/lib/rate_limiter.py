@@ -19,7 +19,7 @@ def check_analysis_quota(db, user_id: str) -> tuple:
     try:
         # Check subscription status and admin role
         sub_result = db.execute_sql(
-            "SELECT is_subscribed, role FROM app_users "
+            "SELECT is_subscribed, role FROM app_users_v4 "
             "WHERE id = ? "
             "ORDER BY updated_at DESC LIMIT 1",
             params=[user_id]
