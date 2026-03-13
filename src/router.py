@@ -16,6 +16,7 @@ from src.handlers import health  # Health check endpoints
 from src.handlers import database_admin  # Database setup and cleanup
 from src.handlers import shopping  # Shopping list management
 from src.handlers import analytics  # Cross-table analytics via EXECUTE_SQL
+from src.handlers import voice  # Voice transcription via Whisper
 from src.handlers import bank_statements  # Bank statement CSV upload & transactions
 from src.handlers import reconciliation  # Financial reconciliation
 from src.handlers import caretaker  # Caretaker data access
@@ -123,6 +124,9 @@ ROUTES = [
     ('PUT', r'^/v1/models/config/(?P<use_case>[a-zA-Z0-9_]+)$', model_config.update_model_config),
     ('GET', r'^/v1/models/available$', model_config.list_available_models),
     ('POST', r'^/v1/models/test$', model_config.test_model),
+
+    # Voice Transcription
+    ('POST', r'^/v1/voice/transcribe$', voice.transcribe),
 
     # Storage
     ('POST', r'^/storage/upload$', storage.upload_file),
