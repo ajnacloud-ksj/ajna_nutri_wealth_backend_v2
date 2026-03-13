@@ -127,6 +127,13 @@ jobs:
             exit 1
           fi
 
+          # Optional secrets (warn but don't fail)
+          if [ -z "${{ secrets.SARVAM_API_KEY }}" ]; then
+            echo "⚠️  WARNING: SARVAM_API_KEY not configured (Sarvam AI voice will be unavailable)"
+          else
+            echo "✅ SARVAM_API_KEY is configured"
+          fi
+
           echo "✅ All required secrets are configured"
 
       - name: Update Lambda environment variables with API keys
@@ -144,10 +151,12 @@ jobs:
             --arg openai "${{ secrets.OPENAI_API_KEY }}" \
             --arg groq "${{ secrets.GROQ_API_KEY }}" \
             --arg ibex "${{ secrets.IBEX_API_KEY }}" \
+            --arg sarvam "${{ secrets.SARVAM_API_KEY }}" \
             '. + {
               "OPENAI_API_KEY": $openai,
               "GROQ_API_KEY": $groq,
-              "IBEX_API_KEY": $ibex
+              "IBEX_API_KEY": $ibex,
+              "SARVAM_API_KEY": $sarvam
             }')
 
           # Write to file to avoid shell escaping issues
