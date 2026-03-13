@@ -533,11 +533,18 @@ def _store_receipt_result(db, user_id: str, entry_id: str, data: Dict, image_url
         # Extract payment info
         payment = data.get('payment', {})
 
+        # Guard against AI returning location names as merchant
+        _INVALID_MERCHANTS = {'string', 'unknown', 'n/a', '', 'united states', 'united states of america',
+                              'usa', 'india', 'canada', 'uk', 'united kingdom', 'australia'}
+        merchant = data.get('merchant_name', 'Unknown')
+        if merchant.lower().strip() in _INVALID_MERCHANTS:
+            merchant = 'Unknown Vendor'
+
         # Store main receipt record with all available fields
         receipt_record = {
             "id": entry_id,
             "user_id": user_id,
-            "vendor": data.get('merchant_name', 'Unknown'),
+            "vendor": merchant,
             "store_address": data.get('store_address', ''),
             "city": location.get('city', ''),
             "state": location.get('state', ''),

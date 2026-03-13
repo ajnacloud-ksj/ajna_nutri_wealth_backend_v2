@@ -428,9 +428,11 @@ def _store_receipt(
             # This is already a URL, use as is
             s3_image_url = image_url
 
-        # Extract receipt data (guard against AI returning placeholder values)
+        # Extract receipt data (guard against AI returning placeholder values or location names)
+        _INVALID_MERCHANTS = {'string', 'unknown', 'n/a', '', 'united states', 'united states of america',
+                              'usa', 'india', 'canada', 'uk', 'united kingdom', 'australia'}
         merchant = ai_data.get('merchant_name') or ai_data.get('vendor') or 'Unknown Vendor'
-        if merchant.lower() in ('string', 'unknown', 'n/a', ''):
+        if merchant.lower().strip() in _INVALID_MERCHANTS:
             merchant = 'Unknown Vendor'
         date_str = ai_data.get('purchase_date') or ai_data.get('receipt_date') or utc_date()
         if 'YYYY' in date_str or date_str == 'string':

@@ -17,7 +17,7 @@ RECEIPT_RESPONSE_SCHEMA = {
     "properties": {
         "merchant_name": {
             "type": "string",
-            "description": "Store/vendor name exactly as shown"
+            "description": "Store or brand name (e.g. 'OLD Navy', 'Walmart'). Must be the business name, NEVER a country, city, or address."
         },
         "store_address": {
             **_nullable_string,

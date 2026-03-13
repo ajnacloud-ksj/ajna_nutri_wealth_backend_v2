@@ -223,7 +223,7 @@ Return ONLY a JSON object with:
             return {
                 "system_prompt": (
                     "You are a receipt/purchase parser. Extract purchase details and return valid JSON with these fields:\n"
-                    "- merchant_name: actual store/vendor name (e.g. 'Walmart', 'Coffee Shop', 'Unknown' if not stated)\n"
+                    "- merchant_name: the STORE or BRAND name (e.g. 'OLD Navy', 'Walmart', 'Starbucks'). NEVER use a country, city, or address as merchant_name.\n"
                     "- purchase_date: date in YYYY-MM-DD format, use today's date if not specified\n"
                     "- financial_summary: {total_amount, subtotal, tax_amount, discount_amount, currency}\n"
                     "- items: array of {name, quantity, unit_price, total_price, category}\n"
