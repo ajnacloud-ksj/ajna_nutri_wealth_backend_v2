@@ -4,7 +4,6 @@ Provides generic CRUD operations for all database tables
 """
 
 import json
-from datetime import datetime
 import uuid
 from typing import Dict, Any, Optional, List
 
@@ -14,6 +13,7 @@ from lib.validators import validate_request, ValidationError
 from lib.logger import logger, log_handler
 from utils.http import respond
 from utils.nutrition_calculator import enrich_food_entries
+from utils.timestamps import utc_now
 
 
 def resolve_image_urls(db, records: list) -> list:
@@ -203,7 +203,7 @@ def create_data(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any
     schema_fields = schema.get('fields', {})
 
     # Process records
-    current_time = datetime.utcnow().isoformat()
+    current_time = utc_now()
     processed_records = []
 
     for record in records:
@@ -359,7 +359,7 @@ def update_data(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any
 
     # Add updated_at timestamp
     if 'updated_at' in schema_fields:
-        updates['updated_at'] = datetime.utcnow().isoformat()
+        updates['updated_at'] = utc_now()
 
     # Build filters
     filters = [{"field": "id", "operator": "eq", "value": item_id}]

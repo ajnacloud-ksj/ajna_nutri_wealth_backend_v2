@@ -15,6 +15,7 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 
 from utils.http import respond, get_user_id
+from utils.timestamps import utc_now, utc_date
 from lib.auth_provider import require_auth
 from lib.logger import logger
 
@@ -357,7 +358,7 @@ def process_csv(csv_text: str, source_hint: Optional[str] = None) -> List[Dict]:
             raw_txns = parse_generic(rows)
 
     # Categorize and enrich
-    today = datetime.utcnow().strftime('%Y-%m-%d')
+    today = utc_date()
     for txn in raw_txns:
         # Fix future dates (year typo)
         if txn["date"] > today:
@@ -411,7 +412,7 @@ def upload_csv(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]
 
     # Generate batch ID for this upload
     batch_id = str(uuid.uuid4())
-    now = datetime.utcnow().isoformat()
+    now = utc_now()
 
     # Deduplicate against existing transactions using targeted SQL
     # Only check the specific (date, description, amount) combos from this CSV

@@ -5,8 +5,8 @@ Handles automatic sync between Cognito and database
 
 import os
 import logging
-from datetime import datetime
 from typing import Dict, Any, Optional
+from utils.timestamps import utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +43,8 @@ def ensure_user_exists(user_id: str, user_claims: Dict[str, Any], db) -> bool:
                     "app_users_v4",
                     filters=[{"field": "id", "operator": "eq", "value": user_id}],
                     updates={
-                        "last_usage_date": datetime.utcnow().isoformat(),
-                        "updated_at": datetime.utcnow().isoformat()
+                        "last_usage_date": utc_now(),
+                        "updated_at": utc_now()
                     }
                 )
                 return True
@@ -74,9 +74,9 @@ def ensure_user_exists(user_id: str, user_claims: Dict[str, Any], db) -> bool:
             "user_type": user_type,
             "is_subscribed": False,
             "trial_used_today": 0,
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat(),
-            "last_usage_date": datetime.utcnow().isoformat()
+            "created_at": utc_now(),
+            "updated_at": utc_now(),
+            "last_usage_date": utc_now()
         }
 
         logger.info(f"Creating new user: {email} with role: {role}")

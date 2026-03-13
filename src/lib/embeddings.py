@@ -141,8 +141,8 @@ def zvec_load_from_ibexdb(db, days: int = 90):
         return _zvec_doc_count
 
     try:
-        from datetime import datetime, timedelta
-        cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+        from datetime import datetime, timezone, timedelta
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).strftime('%Y-%m-%dT%H:%M:%S')
 
         result = db.query("app_receipt_item_embeddings", filters=[
             {"field": "created_at", "operator": "gte", "value": cutoff}

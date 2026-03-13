@@ -6,12 +6,12 @@ Optimized for speed with configurable models
 import os
 import json
 import time
-from datetime import datetime
 from typing import Dict, Any, Optional
 import pytz
 from openai import OpenAI
 from lib.logger import logger
 from config.settings import settings
+from utils.timestamps import utc_now
 
 
 class FastAIService:
@@ -265,7 +265,7 @@ Be concise and accurate. If you cannot determine exact values, make reasonable e
                 "model_used": self.default_model,
                 "total_tokens": tokens,
                 "cost_usd": cost,
-                "created_at": datetime.utcnow().isoformat()
+                "created_at": utc_now()
             }
 
             self.db.write("app_api_costs", [cost_record])

@@ -5,7 +5,6 @@ This demonstrates how to apply all the new patterns to existing handlers
 
 import json
 import uuid
-from datetime import datetime
 from typing import Dict, Any, Optional
 
 # Import new utilities
@@ -14,6 +13,7 @@ from lib.validators import validate_request, ValidationError
 from lib.logger import logger, log_handler
 from config.settings import settings
 from utils.http import respond
+from utils.timestamps import utc_now, utc_date, utc_time
 
 
 # Define validation schema for analyze endpoint
@@ -325,8 +325,8 @@ def _store_food_entry(
             'user_id': user_id,
             'description': food_name,
             'meal_type': meal_type,
-            'meal_date': datetime.utcnow().strftime('%Y-%m-%d'),
-            'meal_time': datetime.utcnow().strftime('%H:%M'),
+            'meal_date': utc_date(),
+            'meal_time': utc_time(),
             'calories': total_calories,
             'total_protein': total_protein,
             'total_carbohydrates': total_carbs,
@@ -336,8 +336,8 @@ def _store_food_entry(
             'extracted_nutrients': json.dumps(ai_data),
             'image_url': s3_image_url or '',  # Store S3 URL, not base64
             'image_storage_type': 's3' if s3_image_url else 'none',
-            'created_at': datetime.utcnow().isoformat(),
-            'updated_at': datetime.utcnow().isoformat()
+            'created_at': utc_now(),
+            'updated_at': utc_now()
         }
 
         # Store in database
@@ -366,7 +366,7 @@ def _store_food_entry(
                         'fats': item.get('fat', item.get('fats', 0)),
                         'fiber': item.get('fiber', 0),
                         'sodium': item.get('sodium', 0),
-                        'created_at': datetime.utcnow().isoformat()
+                        'created_at': utc_now()
                     })
                 items_result = db.write('app_food_items', item_records)
                 if items_result.get('success'):
@@ -432,9 +432,9 @@ def _store_receipt(
         merchant = ai_data.get('merchant_name') or ai_data.get('vendor') or 'Unknown Vendor'
         if merchant.lower() in ('string', 'unknown', 'n/a', ''):
             merchant = 'Unknown Vendor'
-        date_str = ai_data.get('purchase_date') or ai_data.get('receipt_date') or datetime.utcnow().strftime('%Y-%m-%d')
+        date_str = ai_data.get('purchase_date') or ai_data.get('receipt_date') or utc_date()
         if 'YYYY' in date_str or date_str == 'string':
-            date_str = datetime.utcnow().strftime('%Y-%m-%d')
+            date_str = utc_date()
         financial = ai_data.get('financial_summary', {})
         total = financial.get('total_amount') or ai_data.get('total_amount', 0.0) or 0.0
         currency = financial.get('currency') or ai_data.get('currency', 'USD')
@@ -454,8 +454,8 @@ def _store_receipt(
             'receipt_number': ai_data.get('receipt_number', ''),
             'image_url': s3_image_url or '',
             'image_storage_type': 's3' if s3_image_url else 'none',
-            'created_at': datetime.utcnow().isoformat(),
-            'updated_at': datetime.utcnow().isoformat()
+            'created_at': utc_now(),
+            'updated_at': utc_now()
         }
 
         # Store receipt
@@ -477,7 +477,7 @@ def _store_receipt(
                     'total_price': total_price,
                     'quantity': quantity,
                     'category': item.get('category', ''),
-                    'created_at': datetime.utcnow().isoformat()
+                    'created_at': utc_now()
                 })
             db.write('app_receipt_items', item_records)
 
@@ -499,7 +499,7 @@ def _store_receipt(
                         'store_name': merchant,
                         'embedding': json.dumps(emb),
                         'embedding_model': 'text-embedding-3-small',
-                        'created_at': datetime.utcnow().isoformat()
+                        'created_at': utc_now()
                     })
                     zvec_items.append({
                         'receipt_item_id': item_rec['id'],
@@ -581,14 +581,14 @@ def _store_workout(
             'workout_type': workout_type,
             'duration': duration,
             'calories_burned': calories,
-            'workout_date': ai_data.get('workout_date') or datetime.utcnow().strftime('%Y-%m-%d'),
+            'workout_date': ai_data.get('workout_date') or utc_date(),
             'intensity_level': ai_data.get('intensity_level', ''),
             'muscle_groups': ai_data.get('muscle_groups', ''),
             'description': ai_data.get('notes') or ai_data.get('description') or '',
             'notes': ai_data.get('notes') or '',
             'image_url': s3_image_url or '',  # Store S3 URL, not base64
             'image_storage_type': 's3' if s3_image_url else 'none',
-            'created_at': datetime.utcnow().isoformat()
+            'created_at': utc_now()
         }
 
         # Store workout
@@ -609,7 +609,7 @@ def _store_workout(
                     'distance': ex.get('distance_miles'),
                     'duration_minutes': float(ex.get('duration_seconds', 0) or 0) / 60.0 if ex.get('duration_seconds') else float(ex.get('duration_minutes', 0) or 0),
                     'calories_burned': float(ex.get('calories_burned', 0) or 0),
-                    'created_at': datetime.utcnow().isoformat()
+                    'created_at': utc_now()
                 })
             db.write('app_workout_exercises', ex_records)
 

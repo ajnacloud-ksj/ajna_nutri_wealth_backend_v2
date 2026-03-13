@@ -4,8 +4,9 @@ Admin-only endpoints for user and system management
 
 import os
 import json
-from datetime import datetime
 from typing import Dict, Any
+
+from utils.timestamps import utc_now
 
 from lib.auth_provider_enhanced import require_admin_role
 from lib.logger import logger, log_handler
@@ -107,7 +108,7 @@ def update_user_role(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str
             filters=[{"field": "id", "operator": "eq", "value": user_id}],
             updates={
                 "role": new_role,
-                "updated_at": datetime.utcnow().isoformat()
+                "updated_at": utc_now()
             }
         )
 
@@ -150,7 +151,7 @@ def toggle_user_status(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[s
             filters=[{"field": "id", "operator": "eq", "value": user_id}],
             updates={
                 "is_active": is_active,
-                "updated_at": datetime.utcnow().isoformat()
+                "updated_at": utc_now()
             }
         )
 
@@ -220,8 +221,8 @@ def get_system_stats(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str
                 entry_stats[table] = "Error"
 
         # Get recent activity (last 24 hours)
-        from datetime import datetime, timedelta
-        yesterday = (datetime.utcnow() - timedelta(days=1)).isoformat()
+        from datetime import datetime, timezone, timedelta
+        yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%S')
 
         recent_entries = 0
         try:

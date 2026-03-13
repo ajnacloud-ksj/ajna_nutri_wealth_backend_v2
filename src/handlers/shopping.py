@@ -5,10 +5,11 @@ Shopping List handlers - CRUD + AI-powered item parsing and list preparation
 import json
 import uuid
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Any
 
 from utils.http import respond, get_user_id
+from utils.timestamps import utc_now, utc_date
 from lib.auth_provider import require_auth
 from lib.logger import logger
 from lib.model_manager import get_model_manager
@@ -113,7 +114,7 @@ def create_list(event, context):
             return respond(400, {"error": "List name is required"})
 
         list_id = str(uuid.uuid4())
-        now = datetime.utcnow().isoformat()
+        now = utc_now()
 
         record = {
             "id": list_id,
@@ -225,7 +226,7 @@ def update_list(event, context):
         if not updates:
             return respond(400, {"error": "No valid fields to update"})
 
-        updates['updated_at'] = datetime.utcnow().isoformat()
+        updates['updated_at'] = utc_now()
 
         result = db.update("app_shopping_lists",
                           filters=[
@@ -344,7 +345,7 @@ def add_items(event, context):
             })
 
         # Write to database
-        now = datetime.utcnow().isoformat()
+        now = utc_now()
         item_records = []
         for item in parsed_items:
             item_records.append({
@@ -408,7 +409,7 @@ def update_item(event, context):
         if not updates:
             return respond(400, {"error": "No valid fields to update"})
 
-        updates['updated_at'] = datetime.utcnow().isoformat()
+        updates['updated_at'] = utc_now()
 
         result = db.update("app_shopping_list_items",
                           filters=[
@@ -486,7 +487,7 @@ def prepare_list(event, context):
             return respond(400, {"error": "List has no items to optimize"})
 
         # 2. Vector similarity search against receipt item embeddings (last 90 days)
-        ninety_days_ago = (datetime.utcnow() - timedelta(days=90)).isoformat()
+        ninety_days_ago = (datetime.now(timezone.utc) - timedelta(days=90)).strftime('%Y-%m-%dT%H:%M:%S')
 
         receipt_history = []
         vector_matches = {}  # keyed by shopping item name
@@ -681,7 +682,7 @@ Optimize this shopping list with price estimates, store recommendations, and sug
                   filters=[{"field": "id", "operator": "eq", "value": list_id}],
                   updates={
                       "estimated_total": estimated_total,
-                      "updated_at": datetime.utcnow().isoformat()
+                      "updated_at": utc_now()
                   })
 
         return respond(200, {
@@ -720,7 +721,7 @@ def _update_list_totals(db, user_id: str, list_id: str):
                       updates={
                           "item_count": len(items),
                           "estimated_total": round(total, 2),
-                          "updated_at": datetime.utcnow().isoformat()
+                          "updated_at": utc_now()
                       })
     except Exception as e:
         logger.error(f"Error updating list totals: {e}")
@@ -738,7 +739,7 @@ def _log_shopping_cost(db, user_id: str, function_name: str, tokens: int, config
             "model_used": json.dumps({"analyzer": config.model_name}),
             "total_tokens": tokens,
             "cost_usd": cost,
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": utc_now()
         }])
     except Exception as e:
         logger.error(f"Failed to log shopping cost: {e}")

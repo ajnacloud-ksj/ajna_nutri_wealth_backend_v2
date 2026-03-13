@@ -1,13 +1,13 @@
 import json
 import os
 import uuid
-from datetime import datetime
 from typing import Dict, Any, Optional
 
-from src.lib.auth_provider import get_user_id, require_auth
+from lib.auth_provider import get_user_id, require_auth
 from ajna_cloud import logger, respond
-from src.lib.ai_optimized import OptimizedAIService
-from src.lib.rate_limiter import check_analysis_quota
+from lib.ai_optimized import OptimizedAIService
+from lib.rate_limiter import check_analysis_quota
+from utils.timestamps import utc_now, utc_date
 import boto3
 
 
@@ -83,8 +83,8 @@ def submit_analysis(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             "description": description,
             "image_url": image_url,
             "category": "unknown",  # Will be determined by AI classification
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat()
+            "created_at": utc_now(),
+            "updated_at": utc_now()
         }])
         
         # 2. Send to SQS queue - DO NOT send image data, only references
@@ -348,8 +348,8 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
                              "status": "storage_failed",
                              "error_message": f"Storage failed: {str(storage_error)}",
                              "category": category,
-                             "failed_at": datetime.utcnow().isoformat(),
-                             "updated_at": datetime.utcnow().isoformat()
+                             "failed_at": utc_now(),
+                             "updated_at": utc_now()
                          })
                 # Don't continue to mark as completed if storage failed
                 return {"statusCode": 500, "body": json.dumps({"success": False, "error": f"Storage failed: {str(storage_error)}"})}
@@ -364,8 +364,8 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
                                      updates={
                                          "status": "completed",
                                          "category": category,
-                                         "completed_at": datetime.utcnow().isoformat(),
-                                         "updated_at": datetime.utcnow().isoformat()
+                                         "completed_at": utc_now(),
+                                         "updated_at": utc_now()
                                      })
 
             if update_result.get('success'):
@@ -385,8 +385,8 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
                      updates={
                          "status": "failed",
                          "error_message": error_msg,
-                         "failed_at": datetime.utcnow().isoformat(),
-                         "updated_at": datetime.utcnow().isoformat()
+                         "failed_at": utc_now(),
+                         "updated_at": utc_now()
                      })
             logger.error("Async analysis failed", extra={'entry_id': entry_id, 'error': error_msg})
 
@@ -405,7 +405,7 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
                          updates={
                              "status": "failed",
                              "error_message": str(e),
-                             "failed_at": datetime.utcnow().isoformat()
+                             "failed_at": utc_now()
                          })
         except:
             pass
@@ -467,8 +467,8 @@ def _store_food_result(db, user_id: str, entry_id: str, data: Dict, image_url: s
             "image_url": image_url or '',
             "extracted_nutrients": json.dumps(data),
             "analysis_status": "completed",  # Mark as completed
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat()
+            "created_at": utc_now(),
+            "updated_at": utc_now()
         }
 
         logger.info(f"Attempting to write food entry: {json.dumps(food_entry)}")
@@ -494,7 +494,7 @@ def _store_food_result(db, user_id: str, entry_id: str, data: Dict, image_url: s
                         'fats': item.get('fat', item.get('fats', 0)),
                         'fiber': item.get('fiber', 0),
                         'sodium': item.get('sodium', 0),
-                        'created_at': datetime.utcnow().isoformat()
+                        'created_at': utc_now()
                     })
                 items_write = db.write('app_food_items', item_records)
                 if items_write.get('success'):
@@ -543,7 +543,7 @@ def _store_receipt_result(db, user_id: str, entry_id: str, data: Dict, image_url
             "state": location.get('state', ''),
             "postal_code": location.get('postal_code', ''),
             "country": location.get('country', 'USA'),
-            "receipt_date": data.get('purchase_date', datetime.utcnow().strftime('%Y-%m-%d')),
+            "receipt_date": data.get('purchase_date', utc_date()),
             "receipt_time": data.get('purchase_time', ''),
             "purchase_channel": data.get('receipt_category', 'Retail'),
             "total_amount": financial.get('total_amount', data.get('total_amount', 0)),
@@ -560,8 +560,8 @@ def _store_receipt_result(db, user_id: str, entry_id: str, data: Dict, image_url
             "tags": data.get('receipt_category', ''),
             # Store full items data as JSON for reference
             "items": json.dumps(data.get('items', [])),
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat()
+            "created_at": utc_now(),
+            "updated_at": utc_now()
         }
 
         result = db.write("app_receipts", [receipt_record])
@@ -586,8 +586,8 @@ def _store_receipt_result(db, user_id: str, entry_id: str, data: Dict, image_url
                     "category": item.get('category', 'Other'),
                     "department": item.get('department', ''),
                     "is_taxable": item.get('is_taxable', True),
-                    "created_at": datetime.utcnow().isoformat(),
-                    "updated_at": datetime.utcnow().isoformat()
+                    "created_at": utc_now(),
+                    "updated_at": utc_now()
                 }
                 item_records.append(item_record)
 
@@ -614,7 +614,7 @@ def _store_receipt_result(db, user_id: str, entry_id: str, data: Dict, image_url
                             'store_name': data.get('merchant_name', 'Unknown'),
                             'embedding': json.dumps(emb),
                             'embedding_model': 'text-embedding-3-small',
-                            'created_at': datetime.utcnow().isoformat()
+                            'created_at': utc_now()
                         })
                         zvec_items.append({
                             'receipt_item_id': item_rec['id'],
@@ -655,14 +655,14 @@ def _store_workout_result(db, user_id: str, entry_id: str, data: Dict, image_url
             'workout_type': workout_type,
             'duration': duration,
             'calories_burned': calories,
-            'workout_date': data.get('workout_date') or datetime.utcnow().strftime('%Y-%m-%d'),
+            'workout_date': data.get('workout_date') or utc_date(),
             'intensity_level': data.get('intensity_level', ''),
             'muscle_groups': data.get('muscle_groups', ''),
             'description': data.get('notes') or data.get('description') or '',
             'notes': data.get('notes', ''),
             'image_url': image_url or '',
-            'created_at': datetime.utcnow().isoformat(),
-            'updated_at': datetime.utcnow().isoformat()
+            'created_at': utc_now(),
+            'updated_at': utc_now()
         }
 
         result = db.write('app_workouts', [workout_record])
@@ -684,7 +684,7 @@ def _store_workout_result(db, user_id: str, entry_id: str, data: Dict, image_url
                     'distance': ex.get('distance_miles'),
                     'duration_minutes': float(ex.get('duration_seconds', 0) or 0) / 60.0 if ex.get('duration_seconds') else float(ex.get('duration_minutes', 0) or 0),
                     'calories_burned': ex.get('calories_burned', 0),
-                    'created_at': datetime.utcnow().isoformat()
+                    'created_at': utc_now()
                 })
             ex_result = db.write('app_workout_exercises', ex_records)
             if ex_result.get('success'):

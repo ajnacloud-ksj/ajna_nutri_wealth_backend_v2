@@ -8,6 +8,7 @@ import os
 import json
 import time
 from datetime import datetime, timedelta
+from utils.timestamps import utc_now
 from typing import Dict, Any, Optional, Tuple
 import pytz
 from openai import OpenAI
@@ -521,7 +522,7 @@ Return ONLY a JSON object with:
                 "model_used": json.dumps(models_used),
                 "total_tokens": total_tokens,
                 "cost_usd": cost_usd,
-                "created_at": datetime.utcnow().isoformat()
+                "created_at": utc_now()
             }
 
             self.db.write("app_api_costs", [log_entry])

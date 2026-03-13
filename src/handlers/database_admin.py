@@ -4,8 +4,9 @@ Database setup and cleanup admin endpoints
 
 import json
 import os
-from datetime import datetime
 from typing import Dict, Any
+
+from utils.timestamps import utc_now, utc_compact
 
 from src.lib.auth_provider_enhanced import require_admin_role
 from ajna_cloud import logger, log_handler, respond
@@ -100,7 +101,7 @@ def setup_database(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, 
         body = json.loads(event.get('body', '{}'))
         if body.get('create_admin_user'):
             admin_email = body.get('admin_email', 'admin@nutriwealth.com')
-            admin_id = body.get('admin_id', 'admin-' + datetime.utcnow().strftime('%Y%m%d%H%M%S'))
+            admin_id = body.get('admin_id', 'admin-' + utc_compact())
 
             # Check if admin user exists
             admin_result = db.query("app_users_v4",
@@ -116,7 +117,7 @@ def setup_database(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, 
                     "email": admin_email,
                     "name": "System Admin",
                     "role": "admin",
-                    "created_at": datetime.utcnow().isoformat(),
+                    "created_at": utc_now(),
                     "profile": json.dumps({
                         "preferences": {},
                         "settings": {"is_admin": True}

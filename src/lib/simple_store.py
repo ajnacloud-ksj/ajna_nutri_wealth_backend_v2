@@ -5,9 +5,10 @@ Perfect for development and small-scale deployment
 
 import json
 import os
-from datetime import datetime
 from threading import Lock
 from typing import Dict, List, Optional, Any
+
+from utils.timestamps import utc_now, utc_epoch
 
 class SimpleStore:
     """
@@ -54,11 +55,11 @@ class SimpleStore:
                 self.data[table] = {}
 
             for record in records:
-                record_id = record.get('id', str(datetime.utcnow().timestamp()))
+                record_id = record.get('id', str(utc_epoch()))
                 # Add metadata
-                record['_updated_at'] = datetime.utcnow().isoformat()
+                record['_updated_at'] = utc_now()
                 if record_id not in self.data[table]:
-                    record['_created_at'] = datetime.utcnow().isoformat()
+                    record['_created_at'] = utc_now()
 
                 self.data[table][record_id] = record
 
@@ -135,7 +136,7 @@ class SimpleStore:
         with self.lock:
             if table in self.data and record_id in self.data[table]:
                 self.data[table][record_id].update(updates)
-                self.data[table][record_id]['_updated_at'] = datetime.utcnow().isoformat()
+                self.data[table][record_id]['_updated_at'] = utc_now()
                 self._save_to_file()
                 return {"success": True}
             return {"success": False, "error": "Record not found"}
