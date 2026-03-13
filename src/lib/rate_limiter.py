@@ -16,17 +16,19 @@ def check_analysis_quota(db, user_id: str) -> tuple:
     Returns (allowed: bool, remaining: int, message: str)
     """
     try:
-        # Check subscription status
+        # Check subscription status and admin role
         sub_sql = (
-            f"SELECT is_subscribed FROM app_users "
+            f"SELECT is_subscribed, role FROM app_users "
             f"WHERE id = '{user_id}' "
             f"ORDER BY updated_at DESC LIMIT 1"
         )
         sub_result = db.execute_sql(sub_sql)
         sub_records = sub_result.get('data', {}).get('records', [])
 
-        if sub_records and sub_records[0].get('is_subscribed'):
-            return True, 999, "Pro subscription - unlimited"
+        if sub_records:
+            user = sub_records[0]
+            if user.get('is_subscribed') or user.get('role') == 'admin':
+                return True, 999, "Unlimited access"
 
         # Count today's analyses from app_api_costs
         today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
