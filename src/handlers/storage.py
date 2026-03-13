@@ -133,9 +133,11 @@ def upload_file(event, context):
 
 @require_auth
 def get_download_url(event, context):
-    """POST /v1/storage/download-url - Get presigned download URL for an S3 key"""
-    db = context['db']
+    """POST /v1/storage/download-url - Get presigned download URL for an S3 key.
 
+    Images are uploaded directly to S3 via presigned PUT URLs (not through IbexDB storage),
+    so we generate presigned GET URLs via boto3 against the same bucket.
+    """
     try:
         body = json.loads(event.get('body', '{}'))
     except Exception:
@@ -146,13 +148,16 @@ def get_download_url(event, context):
         return respond(400, {"error": "Missing 'key' parameter"})
 
     try:
-        res = db.get_download_url(file_key, expires_in=3600)
-        if res.get('success'):
-            url = res.get('data', {}).get('download_url', '')
-            if url:
-                return respond(200, {"success": True, "url": url, "expires_in": 3600})
+        s3 = boto3.client('s3', region_name=os.environ.get('AWS_REGION', 'ap-south-1'))
+        bucket = os.environ.get('S3_BUCKET', 'nutriwealth-uploads')
 
-        return respond(500, {"error": "Failed to generate download URL"})
+        url = s3.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': bucket, 'Key': file_key},
+            ExpiresIn=3600
+        )
+
+        return respond(200, {"success": True, "url": url, "expires_in": 3600})
     except Exception as e:
         logger.error(f"Error generating download URL: {e}")
         return respond(500, {"error": str(e)})
