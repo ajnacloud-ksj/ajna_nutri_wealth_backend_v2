@@ -50,6 +50,10 @@ def setup_database(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, 
             'receipt_item_embeddings',
             'bank_transactions',
             'bank_accounts',
+            'invitation_codes',
+            'care_relationships',
+            'participant_permissions',
+            'caretaker_notes',
             'access_log',
         ]
 
