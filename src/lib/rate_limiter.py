@@ -1,58 +1,52 @@
-from datetime import datetime
-from typing import Dict, Any, Optional, Tuple
-from src.lib.ibex_client import IbexClient
-import os
+"""
+Rate limiter for free-tier users.
+Counts today's AI analyses via app_api_costs table (single source of truth).
+Pro/subscribed users bypass the limit.
+"""
 
-class RateLimiter:
-    def __init__(self, ibex_client: IbexClient):
-        self.ibex = ibex_client
-        self.daily_limit = 10  # Limit for free users
+from datetime import datetime, timezone
 
-    def check_limit(self, user_id: str) -> Tuple[bool, str]:
-        """
-        Check if user has reached their daily limit.
-        Returns (allowed, reason).
-        If allowed, increments the counter.
-        """
-        try:
-            # 1. Fetch user data
-            user = self.ibex.get_item("users", user_id)
-            if not user:
-                return False, "User not found"
 
-            # 2. Check subscription (Pro users have no limits)
-            if user.get("is_subscribed", False):
-                return True, "Pro subscription"
+FREE_DAILY_LIMIT = 5
 
-            # 3. Check daily reset
-            today = datetime.now().strftime("%Y-%m-%d")
-            last_usage = user.get("last_usage_date")
-            current_usage = user.get("trial_used_today", 0)
 
-            needs_reset = last_usage != today
+def check_analysis_quota(db, user_id: str) -> tuple:
+    """
+    Check if user can submit another analysis today.
+    Returns (allowed: bool, remaining: int, message: str)
+    """
+    try:
+        # Check subscription status
+        sub_sql = (
+            f"SELECT is_subscribed FROM app_users "
+            f"WHERE id = '{user_id}' "
+            f"ORDER BY updated_at DESC LIMIT 1"
+        )
+        sub_result = db.execute_sql(sub_sql)
+        sub_records = sub_result.get('data', {}).get('records', [])
 
-            if needs_reset:
-                current_usage = 0
+        if sub_records and sub_records[0].get('is_subscribed'):
+            return True, 999, "Pro subscription - unlimited"
 
-            # 4. Check limit
-            if current_usage >= self.daily_limit:
-                return False, f"Daily limit of {self.daily_limit} reached. Please upgrade to Pro."
+        # Count today's analyses from app_api_costs
+        today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+        count_sql = (
+            f"SELECT COUNT(*) AS cnt FROM app_api_costs "
+            f"WHERE user_id = '{user_id}' "
+            f"AND CAST(created_at AS DATE) = '{today}'"
+        )
+        count_result = db.execute_sql(count_sql)
+        count_records = count_result.get('data', {}).get('records', [])
+        used_today = int(count_records[0].get('cnt', 0)) if count_records else 0
 
-            # 5. Increment usage
-            new_usage = current_usage + 1
-            
-            # 6. Update user record
-            update_data = {
-                "trial_used_today": new_usage,
-                "last_usage_date": today
-            }
-            
-            self.ibex.update_item("users", user_id, update_data)
-            
-            return True, "Allowed"
+        remaining = max(0, FREE_DAILY_LIMIT - used_today)
 
-        except Exception as e:
-            print(f"Rate limiter error: {e}")
-            # Fail open (allow) or closed (deny) depending on policy
-            # Currently failing open to avoid blocking users on system errors
-            return True, "Error check bypassed"
+        if used_today >= FREE_DAILY_LIMIT:
+            return False, 0, f"Daily limit of {FREE_DAILY_LIMIT} free analyses reached. Upgrade to Pro for unlimited."
+
+        return True, remaining, f"{used_today}/{FREE_DAILY_LIMIT} used today"
+
+    except Exception as e:
+        # Fail open - don't block users on system errors
+        print(f"Rate limiter error: {e}")
+        return True, FREE_DAILY_LIMIT, "Quota check bypassed"

@@ -7,6 +7,7 @@ from typing import Dict, Any, Optional
 from src.lib.auth_provider import get_user_id, require_auth
 from ajna_cloud import logger, respond
 from src.lib.ai_optimized import OptimizedAIService
+from src.lib.rate_limiter import check_analysis_quota
 import boto3
 
 @require_auth
@@ -19,18 +20,25 @@ def submit_analysis(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         user_id = get_user_id(event)
         if not user_id:
             return respond(401, {"error": "Unauthorized"})
-            
+
         body = json.loads(event.get('body', '{}'))
         description = body.get('description')
         image_url = body.get('image_url')
-        
+
         if not description and not image_url:
             return respond(400, {"error": "Description or image_url required"})
-            
-        entry_id = str(uuid.uuid4())
-        
-        # 1. Create pending record
+
+        # Check quota for free-tier users
         db = context.get('db')
+        allowed, remaining, quota_msg = check_analysis_quota(db, user_id)
+        if not allowed:
+            return respond(429, {
+                "error": quota_msg,
+                "remaining": 0,
+                "daily_limit": 5
+            })
+
+        entry_id = str(uuid.uuid4())
 
         # Log tenant info for debugging
         tenant_info = context.get('tenant', {})
@@ -82,7 +90,11 @@ def submit_analysis(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             "entry_id": entry_id,
             "status": "pending",
             "message": "Analysis queued",
-            "sqs_message_id": sqs_response['MessageId']
+            "sqs_message_id": sqs_response['MessageId'],
+            "quota": {
+                "remaining": remaining - 1,
+                "daily_limit": 5
+            }
         })
 
     except Exception as e:
