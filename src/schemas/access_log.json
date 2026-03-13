@@ -1,0 +1,48 @@
+{
+    "fields": {
+        "id": {
+            "type": "string",
+            "required": true
+        },
+        "caretaker_id": {
+            "type": "string",
+            "required": true
+        },
+        "participant_id": {
+            "type": "string",
+            "required": true
+        },
+        "action": {
+            "type": "string",
+            "required": true
+        },
+        "resource_type": {
+            "type": "string",
+            "required": true
+        },
+        "resource_id": {
+            "type": "string",
+            "required": false
+        },
+        "category": {
+            "type": "string",
+            "required": true
+        },
+        "record_count": {
+            "type": "integer",
+            "required": false
+        },
+        "ip_address": {
+            "type": "string",
+            "required": false
+        },
+        "user_agent": {
+            "type": "string",
+            "required": false
+        },
+        "created_at": {
+            "type": "timestamp",
+            "required": true
+        }
+    }
+}

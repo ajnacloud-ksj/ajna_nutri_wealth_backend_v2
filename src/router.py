@@ -18,6 +18,10 @@ from src.handlers import shopping  # Shopping list management
 from src.handlers import analytics  # Cross-table analytics via EXECUTE_SQL
 from src.handlers import bank_statements  # Bank statement CSV upload & transactions
 from src.handlers import reconciliation  # Financial reconciliation
+from src.handlers import caretaker  # Caretaker data access
+from src.handlers import invitations  # Invitation code management
+from src.handlers import relationships  # Relationship management
+from src.handlers import permissions_mgmt  # Permissions management
 # from src.handlers import user  # User profile management - COMMENTED OUT UNTIL DEPLOYED
 
 # Note: Using improved analyze handler with two-stage AI processing
@@ -74,6 +78,33 @@ ROUTES = [
     ('GET', r'^/v1/analytics/spending/vendors$', analytics.spending_by_vendor),
     ('GET', r'^/v1/analytics/spending/trend$', analytics.spending_trend),
     ('GET', r'^/v1/analytics/nutrition/trend$', analytics.nutrition_trend),
+
+    # Caretaker Access
+    ('GET',  r'^/v1/caretaker/participants$', caretaker.list_participants),
+    ('GET',  r'^/v1/caretaker/participants/(?P<participant_id>[a-zA-Z0-9-]+)/permissions$', caretaker.get_permissions),
+    ('GET',  r'^/v1/caretaker/participants/(?P<participant_id>[a-zA-Z0-9-]+)/analytics/dashboard$', caretaker.get_participant_dashboard),
+    ('POST', r'^/v1/caretaker/participants/(?P<participant_id>[a-zA-Z0-9-]+)/notes$', caretaker.add_note),
+    ('POST', r'^/v1/caretaker/participants/(?P<participant_id>[a-zA-Z0-9-]+)/comments$', caretaker.add_comment),
+    ('GET',  r'^/v1/caretaker/participants/(?P<participant_id>[a-zA-Z0-9-]+)/(?P<category>[a-zA-Z0-9_]+)$', caretaker.get_participant_data),
+
+    # Invitations
+    ('POST', r'^/v1/invitations/create$', invitations.create_invitation),
+    ('GET',  r'^/v1/invitations$', invitations.list_invitations),
+    ('DELETE', r'^/v1/invitations/(?P<id>[a-zA-Z0-9-]+)$', invitations.revoke_invitation),
+    ('POST', r'^/v1/invitations/redeem$', invitations.redeem_invitation),
+
+    # Relationships
+    ('GET',  r'^/v1/relationships$', relationships.list_relationships),
+    ('PUT',  r'^/v1/relationships/(?P<id>[a-zA-Z0-9-]+)$', relationships.update_relationship),
+    ('DELETE', r'^/v1/relationships/(?P<id>[a-zA-Z0-9-]+)$', relationships.revoke_relationship),
+
+    # Permissions Management
+    ('GET',  r'^/v1/permissions$', permissions_mgmt.list_permissions),
+    ('PUT',  r'^/v1/permissions/(?P<id>[a-zA-Z0-9-]+)$', permissions_mgmt.update_permission),
+    ('POST', r'^/v1/permissions/bulk$', permissions_mgmt.bulk_update),
+
+    # Access Log
+    ('GET',  r'^/v1/access-log$', caretaker.get_access_log),
 
     # Receipts (before generic data routes)
     ('GET', r'^/v1/receipts/(?P<id>[a-zA-Z0-9-]+)$', receipts.get_receipt_with_items),

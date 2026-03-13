@@ -50,6 +50,7 @@ def setup_database(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, 
             'receipt_item_embeddings',
             'bank_transactions',
             'bank_accounts',
+            'access_log',
         ]
 
         for table_name in essential_tables:
