@@ -51,7 +51,7 @@ def create_invitation(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[st
         expires_in_hours = 72
 
     now = datetime.now(timezone.utc)
-    expires_at = (now + timedelta(hours=expires_in_hours)).isoformat()
+    expires_at = (now + timedelta(hours=expires_in_hours)).strftime('%Y-%m-%dT%H:%M:%S')
     code = generate_invitation_code()
 
     invitation = {
@@ -64,7 +64,7 @@ def create_invitation(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[st
         "max_uses": 1,
         "current_uses": 0,
         "expires_at": expires_at,
-        "created_at": now.isoformat(),
+        "created_at": now.strftime('%Y-%m-%dT%H:%M:%S'),
     }
 
     try:
@@ -252,7 +252,7 @@ def redeem_invitation(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[st
             if existing_records:
                 return respond(400, {"error": "Active relationship already exists with this participant"})
 
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S')
 
         # Create care relationship
         relationship_id = str(uuid.uuid4())

@@ -98,7 +98,7 @@ def update_permission(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[st
         if not updates:
             return respond(400, {"error": "No valid updates provided"})
 
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S')
         updates['updated_at'] = now
 
         if updates.get('is_granted'):
@@ -146,7 +146,7 @@ def bulk_update(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any
     if not permissions:
         return respond(400, {"error": "permissions array is required"})
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S')
     results = []
 
     for perm_update in permissions:

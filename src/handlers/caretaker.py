@@ -241,7 +241,7 @@ def get_participant_dashboard(event: Dict[str, Any], context: Dict[str, Any]) ->
     if not relationship:
         return respond(403, {"error": "No active care relationship found"})
 
-    since = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    since = (datetime.now(timezone.utc) - timedelta(days=30)).strftime('%Y-%m-%dT%H:%M:%S')
     dashboard = {}
 
     # Food entries summary
@@ -330,7 +330,7 @@ def add_note(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
     if not content:
         return respond(400, {"error": "content is required"})
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S')
     note = {
         "id": str(uuid.uuid4()),
         "care_relationship_id": relationship.get('id', ''),
@@ -389,7 +389,7 @@ def add_comment(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any
     if not check_category_permission(db, user_id, participant_id, entry_type):
         return respond(403, {"error": f"Permission denied for category: {entry_type}"})
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S')
     comment = {
         "id": str(uuid.uuid4()),
         "participant_id": participant_id,

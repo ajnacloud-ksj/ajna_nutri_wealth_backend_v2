@@ -92,7 +92,7 @@ def log_access(db, caretaker_id: str, participant_id: str, action: str,
             "record_count": record_count,
             "ip_address": ip_address,
             "user_agent": user_agent,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S'),
         }
         db.write('app_access_log', [entry])
     except Exception as e:

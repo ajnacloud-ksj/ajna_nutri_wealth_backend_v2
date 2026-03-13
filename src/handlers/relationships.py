@@ -115,7 +115,7 @@ def update_relationship(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[
         if not updates:
             return respond(400, {"error": "No valid updates provided"})
 
-        updates['updated_at'] = datetime.now(timezone.utc).isoformat()
+        updates['updated_at'] = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S')
 
         update_result = db.update(
             'app_care_relationships',
@@ -172,7 +172,7 @@ def revoke_relationship(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[
         if relationship.get('user_id') != user_id and relationship.get('caretaker_id') != user_id:
             return respond(403, {"error": "Not authorized to revoke this relationship"})
 
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S')
 
         # Revoke the relationship
         db.update(
