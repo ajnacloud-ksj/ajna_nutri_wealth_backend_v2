@@ -54,6 +54,20 @@ def resolve_table_name(table_name: str) -> Optional[str]:
     return f"{TABLE_PREFIX}{table_name}"
 
 
+def resolve_schema_key(table_name: str, schemas: dict) -> Optional[str]:
+    """Resolve the schema key for a table name.
+    Schemas are keyed by filename (e.g. 'users_v4'), but URLs may use 'app_users_v4'.
+    """
+    if table_name in schemas:
+        return table_name
+    # Strip app_ prefix
+    if table_name.startswith(TABLE_PREFIX):
+        stripped = table_name[len(TABLE_PREFIX):]
+        if stripped in schemas:
+            return stripped
+    return None
+
+
 def sanitize_json_response(data: Any) -> Any:
     """Replace NaN and other non-JSON values in response data"""
     if isinstance(data, dict):
@@ -89,14 +103,15 @@ def list_data(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
 
     db_table_name = resolve_table_name(table_name)
 
-    # Return empty array for non-existent tables
-    if table_name not in schemas:
+    # Resolve schema key (handles app_ prefix mismatch)
+    schema_key = resolve_schema_key(table_name, schemas)
+    if not schema_key:
         logger.warning(f"Table {table_name} not found in schemas", user_id=user_id)
         return respond(200, [], event=event)
 
     # Get query parameters
     query_params = event.get('queryStringParameters') or {}
-    schema_fields = schemas[table_name].get('fields', {})
+    schema_fields = schemas[schema_key].get('fields', {})
 
     # Build filters from query parameters
     filters = []
@@ -198,8 +213,9 @@ def create_data(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any
     # Handle batch or single
     records = body if isinstance(body, list) else [body]
 
-    # Get schema
-    schema = schemas.get(table_name, {})
+    # Get schema (resolve app_ prefix)
+    schema_key = resolve_schema_key(table_name, schemas)
+    schema = schemas.get(schema_key, {}) if schema_key else {}
     schema_fields = schema.get('fields', {})
 
     # Process records
@@ -282,10 +298,11 @@ def get_data_by_id(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, 
 
     db_table_name = resolve_table_name(table_name)
 
-    if table_name not in schemas:
+    schema_key = resolve_schema_key(table_name, schemas)
+    if not schema_key:
         return respond(404, {"error": f"Resource {table_name} not found"}, event=event)
 
-    schema_fields = schemas[table_name].get('fields', {})
+    schema_fields = schemas[schema_key].get('fields', {})
 
     # Build filters
     filters = [{"field": "id", "operator": "eq", "value": item_id}]
@@ -343,7 +360,8 @@ def update_data(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any
 
     db_table_name = resolve_table_name(table_name)
 
-    if table_name not in schemas:
+    schema_key = resolve_schema_key(table_name, schemas)
+    if not schema_key:
         return respond(404, {"error": f"Resource {table_name} not found"}, event=event)
 
     # Parse body
@@ -355,7 +373,7 @@ def update_data(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any
     if not updates:
         return respond(400, {"error": "No updates provided"}, event=event)
 
-    schema_fields = schemas[table_name].get('fields', {})
+    schema_fields = schemas[schema_key].get('fields', {})
 
     # Add updated_at timestamp
     if 'updated_at' in schema_fields:
@@ -412,10 +430,11 @@ def delete_data(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any
 
     db_table_name = resolve_table_name(table_name)
 
-    if table_name not in schemas:
+    schema_key = resolve_schema_key(table_name, schemas)
+    if not schema_key:
         return respond(404, {"error": f"Resource {table_name} not found"}, event=event)
 
-    schema_fields = schemas[table_name].get('fields', {})
+    schema_fields = schemas[schema_key].get('fields', {})
 
     # Build filters
     filters = [{"field": "id", "operator": "eq", "value": item_id}]

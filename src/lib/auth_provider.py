@@ -47,7 +47,8 @@ def _inject_claims_into_event(event: Dict[str, Any], user_info: Dict[str, Any]):
 
 
 def require_auth(func):
-    """Enhanced require_auth that injects claims into the event for get_user_id."""
+    """Enhanced require_auth that injects claims into the event for get_user_id
+    and syncs user to database on every authenticated request."""
     @wraps(func)
     def wrapper(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         provider = AuthFactory.get_provider()
@@ -60,6 +61,16 @@ def require_auth(func):
             user_info = provider.authenticate(event)
             context['auth'] = user_info
             _inject_claims_into_event(event, user_info)
+
+            # Auto-sync user to database (creates on first visit, updates last_usage_date)
+            db = context.get('db')
+            if db and user_info.get('user_id'):
+                try:
+                    from lib.auth_sync import ensure_user_exists
+                    ensure_user_exists(user_info['user_id'], user_info.get('claims', user_info), db)
+                except Exception as sync_err:
+                    logger.warning(f"User sync failed (non-blocking): {sync_err}")
+
             return func(event, context)
         except AuthError as e:
             return respond(e.status_code, {'error': e.message})
