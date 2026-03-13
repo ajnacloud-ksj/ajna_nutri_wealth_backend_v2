@@ -4,7 +4,7 @@ FROM public.ecr.aws/lambda/python:3.12
 RUN pip install uv
 
 # Install ajna-cloud SDK from GitHub Release wheel
-ARG SDK_VERSION=v0.2.2.0.12
+ARG SDK_VERSION=v0.2.2.0.14
 RUN uv pip install --system --no-cache "https://github.com/ajnacloud-ksj/ajna-cloud-sdk/releases/download/${SDK_VERSION}/ajna_cloud-0.2.2.0-py3-none-any.whl"
 
 # Copy and install remaining dependencies
