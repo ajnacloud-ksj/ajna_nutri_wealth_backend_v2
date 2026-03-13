@@ -131,6 +131,33 @@ def upload_file(event, context):
         logger.error(f"Upload handler error: {e}")
         return respond(500, {"error": str(e)})
 
+@require_auth
+def get_download_url(event, context):
+    """POST /v1/storage/download-url - Get presigned download URL for an S3 key"""
+    db = context['db']
+
+    try:
+        body = json.loads(event.get('body', '{}'))
+    except Exception:
+        return respond(400, {"error": "Invalid JSON"})
+
+    file_key = body.get('key') or body.get('file_key', '')
+    if not file_key:
+        return respond(400, {"error": "Missing 'key' parameter"})
+
+    try:
+        res = db.get_download_url(file_key, expires_in=3600)
+        if res.get('success'):
+            url = res.get('data', {}).get('download_url', '')
+            if url:
+                return respond(200, {"success": True, "url": url, "expires_in": 3600})
+
+        return respond(500, {"error": "Failed to generate download URL"})
+    except Exception as e:
+        logger.error(f"Error generating download URL: {e}")
+        return respond(500, {"error": str(e)})
+
+
 def get_file(event, context):
     """GET /v1/storage/{path+}"""
     db = context['db']
