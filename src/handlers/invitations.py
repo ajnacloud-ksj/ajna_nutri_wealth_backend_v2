@@ -34,9 +34,21 @@ def create_invitation(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[st
         return respond(400, {"error": "Invalid JSON"})
 
     caretaker_type = body.get('caretaker_type', 'family')
-    permission_level = body.get('permission_level', 'view')
-    categories = body.get('categories', [])
-    expires_in_hours = int(body.get('expires_in_hours', 72))
+    permission_level = body.get('permission_level') or body.get('permission_preset', 'view')
+    categories = body.get('categories') or body.get('custom_permissions', [])
+
+    # Handle expiry: UI sends "72h", "7d", "30d" or numeric hours
+    expiry_raw = body.get('expires_in_hours') or body.get('expiry', '72')
+    expiry_str = str(expiry_raw).strip().lower()
+    digits = ''.join(c for c in expiry_str if c.isdigit())
+    if expiry_str.endswith('d'):
+        expires_in_hours = int(digits or '3') * 24
+    elif expiry_str.endswith('h'):
+        expires_in_hours = int(digits or '72')
+    elif digits:
+        expires_in_hours = int(digits)
+    else:
+        expires_in_hours = 72
 
     now = datetime.now(timezone.utc)
     expires_at = (now + timedelta(hours=expires_in_hours)).isoformat()
