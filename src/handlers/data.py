@@ -4,40 +4,28 @@ Provides generic CRUD operations for all database tables
 """
 
 import json
-import os
 from datetime import datetime
 import uuid
 from typing import Dict, Any, Optional, List
 
-import boto3
 from lib.auth_provider import require_auth, get_user_id
 from lib.validators import validate_request, ValidationError
 from lib.logger import logger, log_handler
 from utils.http import respond
 from utils.nutrition_calculator import enrich_food_entries
 
-# S3 client for resolving image URLs (reused across invocations)
-_s3_client = None
 
-def _get_s3_client():
-    global _s3_client
-    if _s3_client is None:
-        _s3_client = boto3.client('s3', region_name=os.environ.get('AWS_REGION', 'ap-south-1'))
-    return _s3_client
-
-def resolve_image_urls(records: list) -> list:
-    """Resolve S3 keys in image_url fields to presigned download URLs."""
-    bucket = os.environ.get('S3_BUCKET', 'nutriwealth-uploads')
-    s3 = _get_s3_client()
+def resolve_image_urls(db, records: list) -> list:
+    """Resolve S3 keys in image_url fields to presigned download URLs via IbexDB."""
     for record in records:
         image_url = record.get('image_url')
         if image_url and isinstance(image_url, str) and image_url.startswith('uploads/'):
             try:
-                record['image_url'] = s3.generate_presigned_url(
-                    'get_object',
-                    Params={'Bucket': bucket, 'Key': image_url},
-                    ExpiresIn=3600
-                )
+                res = db.get_download_url(image_url, expiry_seconds=3600)
+                if res.get('success'):
+                    presigned = res.get('data', {}).get('download_url')
+                    if presigned:
+                        record['image_url'] = presigned
             except Exception:
                 pass  # Keep original key if presigning fails
     return records
@@ -159,7 +147,7 @@ def list_data(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
 
             # Resolve S3 keys to presigned URLs for tables with images
             if table_name in ('food_entries', 'receipts', 'workouts'):
-                cleaned_records = resolve_image_urls(cleaned_records)
+                cleaned_records = resolve_image_urls(db, cleaned_records)
 
             logger.info(
                 f"Retrieved {len(cleaned_records)} records from {table_name}",
@@ -323,7 +311,7 @@ def get_data_by_id(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, 
 
             # Resolve S3 keys to presigned URLs
             if table_name in ('food_entries', 'receipts', 'workouts'):
-                resolve_image_urls([cleaned])
+                resolve_image_urls(db, [cleaned])
 
             return respond(200, cleaned, event=event)
         else:

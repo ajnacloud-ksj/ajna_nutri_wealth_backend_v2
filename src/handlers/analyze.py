@@ -5,7 +5,6 @@ This demonstrates how to apply all the new patterns to existing handlers
 
 import json
 import uuid
-import base64
 from datetime import datetime
 from typing import Dict, Any, Optional
 
@@ -222,37 +221,35 @@ def analyze_food(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, An
         }, event=event)
 
 
-def _upload_base64_to_s3(db, base64_image: str, user_id: str, entry_id: str) -> Optional[str]:
+def _upload_base64_to_s3(db, base64_image: str, user_id: str, entry_id: str, category: str = 'receipts') -> Optional[str]:
     """
-    Upload a base64 image to S3 and return the S3 URL
+    Upload a base64 image to S3 via IbexDB and return the S3 key.
 
     Args:
         db: Database/storage service instance
         base64_image: Base64 encoded image string (with or without data URL prefix)
         user_id: User ID for tracking
         entry_id: Entry ID for unique filename
+        category: Storage category (food, receipts, workouts)
 
     Returns:
-        S3 URL of the uploaded image or None if upload fails
+        S3 key of the uploaded image or None if upload fails
     """
     try:
-        # Remove data URL prefix if present
+        # Extract mime type from data URL prefix if present
         if base64_image.startswith('data:'):
-            # Extract the base64 part from data URL
-            # Format: data:image/png;base64,<base64_data>
-            header, base64_data = base64_image.split(',', 1)
-            # Extract mime type from header
+            header = base64_image.split(',', 1)[0]
             mime_type = header.split(':')[1].split(';')[0]
         else:
-            base64_data = base64_image
-            mime_type = 'image/jpeg'  # Default mime type
+            mime_type = 'image/jpeg'
 
-        # Generate unique filename using entry_id for consistency
         file_extension = mime_type.split('/')[-1]
-        filename = f"receipts/{user_id}/{entry_id}.{file_extension}"
+        if file_extension == 'jpeg':
+            file_extension = 'jpg'
+        filename = f"uploads/{category}/{user_id}/{entry_id}.{file_extension}"
 
-        # Upload to S3 using the existing upload functionality
-        result = db.upload_file(base64_data, filename, mime_type)
+        # db.upload_file handles base64 data URL prefix internally
+        result = db.upload_file(base64_image, filename, mime_type)
 
         if result.get('success'):
             # Return the S3 URL
@@ -295,7 +292,7 @@ def _store_food_entry(
         if image_url and image_url.startswith('data:'):
             # This is base64 data - upload to S3
             logger.info("Uploading food image to S3", user_id=user_id)
-            s3_image_url = _upload_base64_to_s3(db, image_url, user_id, entry_id)
+            s3_image_url = _upload_base64_to_s3(db, image_url, user_id, entry_id, category='food')
 
             if not s3_image_url:
                 logger.warning(
@@ -419,7 +416,7 @@ def _store_receipt(
         if image_url and image_url.startswith('data:'):
             # This is base64 data - upload to S3
             logger.info("Uploading receipt image to S3", user_id=user_id)
-            s3_image_url = _upload_base64_to_s3(db, image_url, user_id, entry_id)
+            s3_image_url = _upload_base64_to_s3(db, image_url, user_id, entry_id, category='receipts')
 
             if not s3_image_url:
                 logger.warning(
@@ -560,7 +557,7 @@ def _store_workout(
         if image_url and image_url.startswith('data:'):
             # This is base64 data - upload to S3
             logger.info("Uploading workout image to S3", user_id=user_id)
-            s3_image_url = _upload_base64_to_s3(db, image_url, user_id, entry_id)
+            s3_image_url = _upload_base64_to_s3(db, image_url, user_id, entry_id, category='workouts')
 
             if not s3_image_url:
                 logger.warning(

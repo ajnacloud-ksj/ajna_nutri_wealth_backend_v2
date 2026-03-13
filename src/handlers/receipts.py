@@ -59,23 +59,39 @@ def get_receipt_with_items(event, context):
 
 def _transform_receipt_image(db, receipt):
     """
-    Transform receipt image URL - convert S3 URLs to presigned URLs,
-    and skip base64 data to reduce payload size
+    Transform receipt image URL - convert S3 keys to presigned URLs,
+    and skip base64 data to reduce payload size.
+    Handles: uploads/ keys, s3:// URLs, http(s) URLs, base64 data.
     """
     image_url = receipt.get('image_url', '')
 
     if image_url:
         if image_url.startswith('data:'):
-            # This is base64 data - don't send it to reduce payload
-            # Mark it so client knows image exists but wasn't sent
+            # Base64 data - don't send to reduce payload
             receipt['image_url'] = ''
             receipt['image_format'] = 'base64_omitted'
             receipt['has_image'] = True
+        elif image_url.startswith('uploads/'):
+            # IbexDB-managed S3 key - resolve via db.get_download_url()
+            try:
+                res = db.get_download_url(image_url, expiry_seconds=3600)
+                if res.get('success'):
+                    presigned_url = res.get('data', {}).get('download_url')
+                    if presigned_url:
+                        receipt['image_url'] = presigned_url
+                        receipt['image_format'] = 's3_presigned'
+                        receipt['has_image'] = True
+                        return receipt
+                receipt['image_url'] = ''
+                receipt['has_image'] = True
+            except Exception as e:
+                print(f"Error generating presigned URL: {e}")
+                receipt['image_url'] = ''
+                receipt['has_image'] = True
         elif image_url.startswith('s3://'):
-            # This is an S3 URL - generate a presigned URL
+            # Legacy s3:// URL format
             try:
                 s3_key = image_url.replace('s3://', '').split('/', 1)[1] if '/' in image_url else image_url.replace('s3://', '')
-                # Get presigned URL with 1 hour expiry
                 res = db.get_download_url(s3_key, expiry_seconds=3600)
                 if res.get('success'):
                     presigned_url = res.get('data', {}).get('download_url')
@@ -83,16 +99,14 @@ def _transform_receipt_image(db, receipt):
                         receipt['image_url'] = presigned_url
                         receipt['image_format'] = 's3_presigned'
                         receipt['has_image'] = True
-                    else:
-                        print(f"Failed to generate presigned URL for {s3_key}")
-                        receipt['image_url'] = ''
-                        receipt['has_image'] = True
+                        return receipt
+                receipt['image_url'] = ''
+                receipt['has_image'] = True
             except Exception as e:
                 print(f"Error generating presigned URL: {e}")
                 receipt['image_url'] = ''
                 receipt['has_image'] = True
         elif image_url.startswith('http://') or image_url.startswith('https://'):
-            # This is already a public URL - use as is
             receipt['image_format'] = 'public_url'
             receipt['has_image'] = True
     else:

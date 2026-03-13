@@ -10,6 +10,36 @@ from src.lib.ai_optimized import OptimizedAIService
 from src.lib.rate_limiter import check_analysis_quota
 import boto3
 
+
+def _upload_image(db, image_url: str, user_id: str, entry_id: str, category: str) -> str:
+    """Upload base64 image via IbexDB engine. Returns S3 key or empty string."""
+    if not image_url or not image_url.startswith('data:'):
+        return image_url or ''
+    try:
+        # Parse data URI header for mime type and extension
+        header = image_url.split(',', 1)[0]
+        mime_type = header.split(':')[1].split(';')[0] if ':' in header else 'image/jpeg'
+        ext = mime_type.split('/')[-1]
+        if ext == 'jpeg':
+            ext = 'jpg'
+
+        filename = f"uploads/{category}/{user_id}/{entry_id}.{ext}"
+
+        # db.upload_file handles base64 data URL prefix internally
+        result = db.upload_file(image_url, filename, mime_type)
+
+        if result.get('success'):
+            s3_key = result.get('key') or result.get('url') or filename
+            logger.info(f"Uploaded image via IbexDB: {s3_key}")
+            return s3_key
+        else:
+            logger.error(f"IbexDB upload failed: {result.get('error')}")
+            return ''
+    except Exception as e:
+        logger.error(f"Failed to upload image: {e}")
+        return ''
+
+
 @require_auth
 def submit_analysis(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
@@ -181,16 +211,14 @@ def get_analysis_status(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         elif status == 'failed':
             response['error'] = record.get('error_message') or record.get('error')
 
-        # Resolve S3 image keys to presigned URLs in result
+        # Resolve S3 image keys to presigned URLs via IbexDB
         if response.get('result') and response['result'].get('image_url', '').startswith('uploads/'):
             try:
-                s3 = boto3.client('s3', region_name=os.environ.get('AWS_REGION', 'ap-south-1'))
-                bucket = os.environ.get('S3_BUCKET', 'nutriwealth-uploads')
-                response['result']['image_url'] = s3.generate_presigned_url(
-                    'get_object',
-                    Params={'Bucket': bucket, 'Key': response['result']['image_url']},
-                    ExpiresIn=3600
-                )
+                res = db.get_download_url(response['result']['image_url'], expiry_seconds=3600)
+                if res.get('success'):
+                    presigned = res.get('data', {}).get('download_url')
+                    if presigned:
+                        response['result']['image_url'] = presigned
             except Exception:
                 pass
 
@@ -393,6 +421,9 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
 def _store_food_result(db, user_id: str, entry_id: str, data: Dict, image_url: str, description: Optional[str] = None):
     """Store food analysis result with proper error handling"""
     try:
+        # Upload base64 image via IbexDB if present
+        image_url = _upload_image(db, image_url, user_id, entry_id, 'food')
+
         food_items = data.get('food_items', [])
 
         logger.info(f"Storing food result for entry {entry_id}, user {user_id}")
@@ -496,6 +527,9 @@ def _store_food_result(db, user_id: str, entry_id: str, data: Dict, image_url: s
 def _store_receipt_result(db, user_id: str, entry_id: str, data: Dict, image_url: str) -> bool:
     """Store comprehensive receipt analysis result. Returns True on success."""
     try:
+        # Upload base64 image via IbexDB if present
+        image_url = _upload_image(db, image_url, user_id, entry_id, 'receipts')
+
         # Extract financial summary
         financial = data.get('financial_summary', {})
 
@@ -614,6 +648,9 @@ def _store_receipt_result(db, user_id: str, entry_id: str, data: Dict, image_url
 def _store_workout_result(db, user_id: str, entry_id: str, data: Dict, image_url: str) -> bool:
     """Store workout analysis result. Returns True on success."""
     try:
+        # Upload base64 image via IbexDB if present
+        image_url = _upload_image(db, image_url, user_id, entry_id, 'workouts')
+
         workout_type = data.get('workout_type', 'General')
         duration = float(data.get('duration_minutes') or data.get('duration') or 0)
         calories = float(data.get('calories_burned') or data.get('calories_burned_estimate') or data.get('estimated_calories') or 0)
