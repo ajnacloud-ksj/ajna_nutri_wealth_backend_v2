@@ -269,26 +269,26 @@ Return ONLY a JSON object with:
         return f"Current UTC time: {now.strftime('%H:%M')}. Time-based meal hint: {meal_hint}. But prioritize food content over time."
 
     def _resolve_image_url(self, image_url: str) -> str:
-        """Resolve S3 key to presigned download URL if needed.
-
-        Files uploaded via presigned PUT URLs go directly to S3, not through IbexDB,
-        so we generate presigned GET URLs directly via boto3.
-        """
+        """Resolve S3 key to presigned download URL via IbexDB SDK."""
         if not image_url or not isinstance(image_url, str):
             return image_url
 
-        if image_url.startswith('uploads/'):
-            import boto3
-            logger.info(f"Resolving S3 key to presigned URL: {image_url}")
-            s3 = boto3.client('s3', region_name=os.environ.get('AWS_REGION', 'ap-south-1'))
-            bucket = os.environ.get('S3_BUCKET', 'nutriwealth-uploads')
-            resolved_url = s3.generate_presigned_url(
-                'get_object',
-                Params={'Bucket': bucket, 'Key': image_url},
-                ExpiresIn=3600
-            )
-            logger.info("Successfully resolved S3 key to presigned download URL")
-            return resolved_url
+        # If it's already an HTTP(S) URL, return as-is
+        if image_url.startswith('http://') or image_url.startswith('https://'):
+            return image_url
+
+        # S3 key (e.g. tenants/nutriwealth/uploads/...) — resolve via IbexDB
+        logger.info(f"Resolving S3 key to presigned URL via IbexDB: {image_url}")
+        try:
+            res = self.db.get_download_url(image_url, expires_in=3600)
+            if res.get('success'):
+                url = res.get('data', {}).get('download_url', '')
+                if url:
+                    logger.info("Successfully resolved S3 key to presigned download URL")
+                    return url
+            logger.error(f"IbexDB get_download_url failed for key={image_url}: {res.get('error', 'unknown')}")
+        except Exception as e:
+            logger.error(f"Error resolving image URL via IbexDB: {e}")
 
         return image_url
 

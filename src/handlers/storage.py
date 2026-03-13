@@ -1,8 +1,5 @@
 import json
 import uuid
-import os
-import base64
-import boto3
 from datetime import datetime, timezone
 from utils.http import respond, get_user_id
 from lib.auth_provider import require_auth
@@ -13,14 +10,14 @@ from .data import resolve_table_name
 
 @require_auth
 def get_upload_url_endpoint(event, context):
-    """POST /storage/upload-url - Get a presigned upload URL for direct binary upload"""
+    """POST /storage/upload-url - Get a presigned upload URL via IbexDB"""
+    db = context['db']
+
     try:
-        # Get user ID from the request (claims injected by @require_auth)
         user_id = get_user_id(event)
         if not user_id:
             return respond(401, {"error": "Unauthorized"})
 
-        # Parse request body
         try:
             body = json.loads(event.get('body', '{}'))
         except:
@@ -28,35 +25,26 @@ def get_upload_url_endpoint(event, context):
 
         filename = body.get('filename') or f"{uuid.uuid4()}.jpg"
         content_type = body.get('content_type', 'image/jpeg')
+        folder = body.get('folder', 'uploads')
 
-        # Generate unique S3 key
-        timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
-        unique_id = str(uuid.uuid4())[:8]
-        key = f"uploads/{user_id}/{timestamp}_{unique_id}_{filename}"
+        # Use IbexDB SDK for presigned upload URL
+        res = db.get_upload_url(filename, content_type, expires_in=3600, folder=folder)
 
-        # Configure S3 client
-        s3 = boto3.client('s3', region_name=os.environ.get('AWS_REGION', 'ap-south-1'))
-        bucket = os.environ.get('S3_BUCKET', 'nutriwealth-uploads')
+        if not res.get('success'):
+            logger.error(f"IbexDB get_upload_url failed: {res}")
+            return respond(500, {"error": f"Failed to get upload URL: {res.get('error', 'unknown')}"})
 
-        # Generate presigned URL for PUT operation
-        url = s3.generate_presigned_url(
-            'put_object',
-            Params={
-                'Bucket': bucket,
-                'Key': key,
-                'ContentType': content_type
-            },
-            ExpiresIn=3600  # URL expires in 1 hour
-        )
+        data = res.get('data', {})
+        upload_url = data.get('upload_url', '')
+        file_key = data.get('file_key', '')
 
-        logger.info(f"Generated upload URL for user {user_id}, key: {key}")
+        logger.info(f"Generated upload URL for user {user_id}, key: {file_key}")
 
         return respond(200, {
             "success": True,
-            "upload_url": url,
-            "key": key,
-            "bucket": bucket,
-            "expires_in": 3600,
+            "upload_url": upload_url,
+            "key": file_key,
+            "expires_in": data.get('expires_in', 3600),
             "instructions": "Send a PUT request to 'upload_url' with the binary file data and Content-Type header."
         })
 
@@ -135,9 +123,11 @@ def upload_file(event, context):
 def get_download_url(event, context):
     """POST /v1/storage/download-url - Get presigned download URL for an S3 key.
 
-    Images are uploaded directly to S3 via presigned PUT URLs (not through IbexDB storage),
-    so we generate presigned GET URLs via boto3 against the same bucket.
+    Uses IbexDB SDK get_download_url which validates tenant ownership and
+    generates presigned GET URLs from the managed S3 bucket.
     """
+    db = context['db']
+
     try:
         body = json.loads(event.get('body', '{}'))
     except Exception:
@@ -148,16 +138,17 @@ def get_download_url(event, context):
         return respond(400, {"error": "Missing 'key' parameter"})
 
     try:
-        s3 = boto3.client('s3', region_name=os.environ.get('AWS_REGION', 'ap-south-1'))
-        bucket = os.environ.get('S3_BUCKET', 'nutriwealth-uploads')
+        res = db.get_download_url(file_key, expires_in=3600)
+        logger.info(f"get_download_url response for key={file_key}: success={res.get('success')}, error={res.get('error')}")
 
-        url = s3.generate_presigned_url(
-            'get_object',
-            Params={'Bucket': bucket, 'Key': file_key},
-            ExpiresIn=3600
-        )
+        if res.get('success'):
+            url = res.get('data', {}).get('download_url', '')
+            if url:
+                return respond(200, {"success": True, "url": url, "expires_in": 3600})
 
-        return respond(200, {"success": True, "url": url, "expires_in": 3600})
+        # Log the full response for debugging
+        logger.error(f"get_download_url failed: {res}")
+        return respond(500, {"error": f"Failed to generate download URL: {res.get('error', 'unknown')}"})
     except Exception as e:
         logger.error(f"Error generating download URL: {e}")
         return respond(500, {"error": str(e)})
