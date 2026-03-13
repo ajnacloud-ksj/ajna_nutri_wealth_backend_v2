@@ -75,9 +75,10 @@ def create_invitation(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[st
                 "expires_at": expires_at,
                 "id": invitation['id'],
             })
-        return respond(500, {"error": "Failed to create invitation"})
+        logger.error(f"db.write failed for app_invitation_codes: {result}")
+        return respond(500, {"error": f"Failed to create invitation: {result.get('error', 'unknown') if result else 'no result'}"})
     except Exception as e:
-        logger.error(f"Error creating invitation: {e}")
+        logger.error(f"Error creating invitation: {e}", exc_info=True)
         return respond(500, {"error": str(e)})
 
 
