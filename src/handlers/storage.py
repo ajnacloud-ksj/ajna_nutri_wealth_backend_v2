@@ -119,12 +119,15 @@ def upload_file(event, context):
         logger.error(f"Upload handler error: {e}")
         return respond(500, {"error": str(e)})
 
+LEGACY_BUCKET = 'nutriwealth-uploads'
+
 @require_auth
 def get_download_url(event, context):
     """POST /v1/storage/download-url - Get presigned download URL for an S3 key.
 
     Uses IbexDB SDK get_download_url which validates tenant ownership and
     generates presigned GET URLs from the managed S3 bucket.
+    Legacy keys (uploads/{user_id}/...) are resolved from the old bucket.
     """
     db = context['db']
 
@@ -138,7 +141,14 @@ def get_download_url(event, context):
         return respond(400, {"error": "Missing 'key' parameter"})
 
     try:
-        res = db.get_download_url(file_key, expires_in=3600)
+        # Detect legacy keys: uploads/{user_id}/... (not tenants/...)
+        # These were uploaded to the old nutriwealth-uploads bucket via boto3
+        bucket = None
+        if file_key.startswith('uploads/') and not file_key.startswith('tenants/'):
+            bucket = LEGACY_BUCKET
+            logger.info(f"Legacy key detected, using bucket={LEGACY_BUCKET}: {file_key}")
+
+        res = db.get_download_url(file_key, expires_in=3600, bucket=bucket)
         logger.info(f"get_download_url response for key={file_key}: success={res.get('success')}, error={res.get('error')}")
 
         if res.get('success'):
@@ -146,7 +156,6 @@ def get_download_url(event, context):
             if url:
                 return respond(200, {"success": True, "url": url, "expires_in": 3600})
 
-        # Log the full response for debugging
         logger.error(f"get_download_url failed: {res}")
         return respond(500, {"error": f"Failed to generate download URL: {res.get('error', 'unknown')}"})
     except Exception as e:

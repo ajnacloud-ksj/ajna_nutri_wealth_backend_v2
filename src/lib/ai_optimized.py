@@ -273,14 +273,19 @@ Return ONLY a JSON object with:
         if not image_url or not isinstance(image_url, str):
             return image_url
 
-        # If it's already an HTTP(S) URL, return as-is
-        if image_url.startswith('http://') or image_url.startswith('https://'):
+        # If it's already an HTTP(S) URL or base64, return as-is
+        if image_url.startswith('http://') or image_url.startswith('https://') or image_url.startswith('data:'):
             return image_url
 
-        # S3 key (e.g. tenants/nutriwealth/uploads/...) — resolve via IbexDB
+        # S3 key — resolve via IbexDB
         logger.info(f"Resolving S3 key to presigned URL via IbexDB: {image_url}")
         try:
-            res = self.db.get_download_url(image_url, expires_in=3600)
+            # Legacy keys (uploads/{user_id}/...) are in the old bucket
+            bucket = None
+            if image_url.startswith('uploads/') and not image_url.startswith('tenants/'):
+                bucket = 'nutriwealth-uploads'
+
+            res = self.db.get_download_url(image_url, expires_in=3600, bucket=bucket)
             if res.get('success'):
                 url = res.get('data', {}).get('download_url', '')
                 if url:
