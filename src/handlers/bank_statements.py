@@ -16,6 +16,7 @@ from typing import Dict, Any, List, Optional
 
 from utils.http import respond, get_user_id
 from lib.auth_provider import require_auth
+from lib.logger import logger
 
 # ── Category Rules ──────────────────────────────────────────────────────────
 CATEGORY_RULES = [
@@ -496,9 +497,10 @@ def upload_csv(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]
 def _upsert_bank_account(db, user_id: str, account_name: str, institution: str, txn_count: int, now: str):
     """Create or update bank account record"""
     try:
-        safe_name = account_name.replace("'", "''")
-        sql = f"SELECT * FROM app_bank_accounts WHERE user_id = '{user_id}' AND account_name = '{safe_name}' LIMIT 1"
-        result = db.execute_sql(sql)
+        result = db.execute_sql(
+            "SELECT * FROM app_bank_accounts WHERE user_id = ? AND account_name = ? LIMIT 1",
+            params=[user_id, account_name]
+        )
         records = result.get('data', {}).get('records', [])
 
         if records:
@@ -526,7 +528,7 @@ def _upsert_bank_account(db, user_id: str, account_name: str, institution: str, 
                 "updated_at": now,
             }])
     except Exception as e:
-        print(f"Error upserting bank account: {e}")
+        logger.error(f"Error upserting bank account: {e}")
 
 
 @require_auth
@@ -542,20 +544,25 @@ def list_transactions(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[st
     limit = min(int(query_params.get('limit', '5000')), 10000)
 
     try:
-        where = [f"user_id = '{user_id}'"]
-        if query_params.get('source_account'):
-            where.append(f"source_account = '{query_params['source_account']}'")
-        if query_params.get('category'):
-            where.append(f"category = '{query_params['category']}'")
-        if query_params.get('transaction_type'):
-            where.append(f"transaction_type = '{query_params['transaction_type']}'")
+        conditions = ["user_id = ?"]
+        params = [user_id]
 
-        sql = f"SELECT * FROM app_bank_transactions WHERE {' AND '.join(where)} ORDER BY date DESC LIMIT {limit}"
-        result = db.execute_sql(sql)
+        if query_params.get('source_account'):
+            conditions.append("source_account = ?")
+            params.append(query_params['source_account'])
+        if query_params.get('category'):
+            conditions.append("category = ?")
+            params.append(query_params['category'])
+        if query_params.get('transaction_type'):
+            conditions.append("transaction_type = ?")
+            params.append(query_params['transaction_type'])
+
+        sql = f"SELECT * FROM app_bank_transactions WHERE {' AND '.join(conditions)} ORDER BY date DESC LIMIT {int(limit)}"
+        result = db.execute_sql(sql, params=params)
         records = result.get('data', {}).get('records', [])
         return respond(200, {"transactions": records, "total": len(records)})
     except Exception as e:
-        print(f"Error listing transactions: {e}")
+        logger.error(f"Error listing transactions: {e}")
         return respond(500, {"error": str(e)})
 
 
@@ -568,8 +575,10 @@ def list_accounts(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, A
     user_id = get_user_id(event) or 'local-dev-user'
 
     try:
-        sql = f"SELECT * FROM app_bank_accounts WHERE user_id = '{user_id}' ORDER BY updated_at DESC LIMIT 50"
-        result = db.execute_sql(sql)
+        result = db.execute_sql(
+            "SELECT * FROM app_bank_accounts WHERE user_id = ? ORDER BY updated_at DESC LIMIT 50",
+            params=[user_id]
+        )
         records = result.get('data', {}).get('records', [])
         return respond(200, {"accounts": records, "total": len(records)})
     except Exception as e:

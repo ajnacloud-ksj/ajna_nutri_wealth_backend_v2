@@ -246,13 +246,13 @@ def get_participant_dashboard(event: Dict[str, Any], context: Dict[str, Any]) ->
 
     # Food entries summary
     try:
-        food_sql = (
-            f"SELECT COUNT(*) as total_entries, "
-            f"COALESCE(AVG(CAST(json_extract_string(extracted_nutrients, '$.total_calories') AS DOUBLE)), 0) as avg_calories "
-            f"FROM app_food_entries_v2 "
-            f"WHERE user_id = '{participant_id}' AND _deleted = false AND created_at >= '{since}'"
+        food_result = db.execute_sql(
+            "SELECT COUNT(*) as total_entries, "
+            "COALESCE(AVG(CAST(json_extract_string(extracted_nutrients, '$.total_calories') AS DOUBLE)), 0) as avg_calories "
+            "FROM app_food_entries_v2 "
+            "WHERE user_id = ? AND _deleted = false AND created_at >= ?",
+            params=[participant_id, since]
         )
-        food_result = db.execute_sql(food_sql)
         if food_result.get('data', {}).get('records'):
             dashboard['food'] = food_result['data']['records'][0]
     except Exception as e:
@@ -261,12 +261,12 @@ def get_participant_dashboard(event: Dict[str, Any], context: Dict[str, Any]) ->
 
     # Workouts summary
     try:
-        workout_sql = (
-            f"SELECT COUNT(*) as total_workouts "
-            f"FROM app_workouts "
-            f"WHERE user_id = '{participant_id}' AND _deleted = false AND created_at >= '{since}'"
+        workout_result = db.execute_sql(
+            "SELECT COUNT(*) as total_workouts "
+            "FROM app_workouts "
+            "WHERE user_id = ? AND _deleted = false AND created_at >= ?",
+            params=[participant_id, since]
         )
-        workout_result = db.execute_sql(workout_sql)
         if workout_result.get('data', {}).get('records'):
             dashboard['workouts'] = workout_result['data']['records'][0]
     except Exception as e:
@@ -275,13 +275,13 @@ def get_participant_dashboard(event: Dict[str, Any], context: Dict[str, Any]) ->
 
     # Receipts summary
     try:
-        receipt_sql = (
-            f"SELECT COUNT(*) as total_receipts, "
-            f"COALESCE(SUM(total_amount), 0) as total_spent "
-            f"FROM app_receipts "
-            f"WHERE user_id = '{participant_id}' AND _deleted = false AND created_at >= '{since}'"
+        receipt_result = db.execute_sql(
+            "SELECT COUNT(*) as total_receipts, "
+            "COALESCE(SUM(total_amount), 0) as total_spent "
+            "FROM app_receipts "
+            "WHERE user_id = ? AND _deleted = false AND created_at >= ?",
+            params=[participant_id, since]
         )
-        receipt_result = db.execute_sql(receipt_sql)
         if receipt_result.get('data', {}).get('records'):
             dashboard['receipts'] = receipt_result['data']['records'][0]
     except Exception as e:

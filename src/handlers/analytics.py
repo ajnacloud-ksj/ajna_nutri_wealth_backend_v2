@@ -3,7 +3,7 @@ Analytics handlers - Cross-table insights powered by EXECUTE_SQL
 Leverages DuckDB's analytical engine for complex queries across Iceberg tables.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 
 from utils.http import respond, get_user_id
 from lib.auth_provider import require_auth
@@ -17,9 +17,12 @@ def dashboard_summary(event, context):
     Returns spending trends, nutrition summary, and recent activity in one call.
     """
     db = context['db']
-    user_id = get_user_id(event) or 'local-dev-user'
-    days = int(event.get('queryStringParameters', {}).get('days', '30') or '30')
-    since = (datetime.utcnow() - timedelta(days=days)).isoformat()
+    user_id = get_user_id(event)
+    if not user_id:
+        return respond(401, {"error": "Authentication required"})
+
+    days = min(int(event.get('queryStringParameters', {}).get('days', '30') or '30'), 365)
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime('%Y-%m-%dT%H:%M:%S')
 
     result = {}
 
@@ -32,8 +35,8 @@ def dashboard_summary(event, context):
             "COALESCE(AVG(total_amount), 0) as avg_per_receipt, "
             "COALESCE(MAX(total_amount), 0) as largest_receipt "
             "FROM app_receipts "
-            "WHERE _deleted = false AND created_at >= ?",
-            params=[since]
+            "WHERE _deleted = false AND user_id = ? AND created_at >= ?",
+            params=[user_id, since]
         )
         if spending.get('success'):
             records = spending.get('data', {}).get('records', [])
@@ -48,9 +51,9 @@ def dashboard_summary(event, context):
             "SELECT category, COUNT(*) as item_count, "
             "COALESCE(SUM(total_price), 0) as total_spent "
             "FROM app_receipt_items "
-            "WHERE _deleted = false AND created_at >= ? "
+            "WHERE _deleted = false AND user_id = ? AND created_at >= ? "
             "GROUP BY category ORDER BY total_spent DESC LIMIT 10",
-            params=[since]
+            params=[user_id, since]
         )
         if categories.get('success'):
             result['top_categories'] = categories.get('data', {}).get('records', [])
@@ -66,8 +69,8 @@ def dashboard_summary(event, context):
             "COALESCE(AVG(CAST(json_extract_string(extracted_nutrients, '$.total_calories') AS DOUBLE)), 0) as avg_calories, "
             "COALESCE(AVG(CAST(json_extract_string(extracted_nutrients, '$.total_protein') AS DOUBLE)), 0) as avg_protein "
             "FROM app_food_entries_v2 "
-            "WHERE _deleted = false AND created_at >= ?",
-            params=[since]
+            "WHERE _deleted = false AND user_id = ? AND created_at >= ?",
+            params=[user_id, since]
         )
         if nutrition.get('success'):
             records = nutrition.get('data', {}).get('records', [])
@@ -87,9 +90,12 @@ def spending_by_vendor(event, context):
     GET /v1/analytics/spending/vendors - Spending breakdown by vendor
     """
     db = context['db']
-    user_id = get_user_id(event) or 'local-dev-user'
-    days = int(event.get('queryStringParameters', {}).get('days', '90') or '90')
-    since = (datetime.utcnow() - timedelta(days=days)).isoformat()
+    user_id = get_user_id(event)
+    if not user_id:
+        return respond(401, {"error": "Authentication required"})
+
+    days = min(int(event.get('queryStringParameters', {}).get('days', '90') or '90'), 365)
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime('%Y-%m-%dT%H:%M:%S')
 
     try:
         result = db.execute_sql(
@@ -98,9 +104,9 @@ def spending_by_vendor(event, context):
             "AVG(total_amount) as avg_amount, "
             "MAX(receipt_date) as last_visit "
             "FROM app_receipts "
-            "WHERE _deleted = false AND created_at >= ? "
+            "WHERE _deleted = false AND user_id = ? AND created_at >= ? "
             "GROUP BY vendor ORDER BY total_spent DESC LIMIT 20",
-            params=[since]
+            params=[user_id, since]
         )
         if result.get('success'):
             return respond(200, {
@@ -119,9 +125,12 @@ def spending_trend(event, context):
     GET /v1/analytics/spending/trend - Weekly spending trend
     """
     db = context['db']
-    user_id = get_user_id(event) or 'local-dev-user'
-    days = int(event.get('queryStringParameters', {}).get('days', '90') or '90')
-    since = (datetime.utcnow() - timedelta(days=days)).isoformat()
+    user_id = get_user_id(event)
+    if not user_id:
+        return respond(401, {"error": "Authentication required"})
+
+    days = min(int(event.get('queryStringParameters', {}).get('days', '90') or '90'), 365)
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime('%Y-%m-%dT%H:%M:%S')
 
     try:
         result = db.execute_sql(
@@ -129,9 +138,9 @@ def spending_trend(event, context):
             "COUNT(*) as receipt_count, "
             "SUM(total_amount) as total_spent "
             "FROM app_receipts "
-            "WHERE _deleted = false AND created_at >= ? "
+            "WHERE _deleted = false AND user_id = ? AND created_at >= ? "
             "GROUP BY week ORDER BY week",
-            params=[since]
+            params=[user_id, since]
         )
         if result.get('success'):
             return respond(200, {
@@ -150,9 +159,12 @@ def nutrition_trend(event, context):
     GET /v1/analytics/nutrition/trend - Daily nutrition trend
     """
     db = context['db']
-    user_id = get_user_id(event) or 'local-dev-user'
-    days = int(event.get('queryStringParameters', {}).get('days', '30') or '30')
-    since = (datetime.utcnow() - timedelta(days=days)).isoformat()
+    user_id = get_user_id(event)
+    if not user_id:
+        return respond(401, {"error": "Authentication required"})
+
+    days = min(int(event.get('queryStringParameters', {}).get('days', '30') or '30'), 365)
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime('%Y-%m-%dT%H:%M:%S')
 
     try:
         result = db.execute_sql(
@@ -161,9 +173,9 @@ def nutrition_trend(event, context):
             "SUM(CAST(json_extract_string(extracted_nutrients, '$.total_calories') AS DOUBLE)) as total_calories, "
             "SUM(CAST(json_extract_string(extracted_nutrients, '$.total_protein') AS DOUBLE)) as total_protein "
             "FROM app_food_entries_v2 "
-            "WHERE _deleted = false AND created_at >= ? "
+            "WHERE _deleted = false AND user_id = ? AND created_at >= ? "
             "GROUP BY date ORDER BY date",
-            params=[since]
+            params=[user_id, since]
         )
         if result.get('success'):
             return respond(200, {

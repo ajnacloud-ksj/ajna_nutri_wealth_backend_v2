@@ -9,6 +9,7 @@ import uuid
 from typing import Dict, Any, Optional, List
 
 from lib.auth_provider import require_auth, get_user_id
+from lib.auth_provider_enhanced import require_admin_role
 from lib.validators import validate_request, ValidationError
 from lib.logger import logger, log_handler
 from utils.http import respond
@@ -438,7 +439,7 @@ def delete_data(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any
 
 
 @log_handler
-@require_auth
+@require_admin_role
 def initialize_schemas(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
     """
     POST /v1/system/initialize-schemas - Initialize database tables
@@ -450,10 +451,6 @@ def initialize_schemas(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[s
     schemas = context['schemas']
 
     logger.info("Initializing database schemas", user_id=user_id)
-
-    # TODO: Add admin role check here
-    # if not is_admin(user_id):
-    #     return respond(403, {"error": "Admin access required"}, event=event)
 
     results = {}
     try:
@@ -506,7 +503,7 @@ def initialize_schemas(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[s
 
 
 @log_handler
-@require_auth
+@require_admin_role
 def create_database(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
     """
     POST /v1/system/create-database - Create database if it doesn't exist
@@ -517,8 +514,6 @@ def create_database(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str,
     db = context['db']
 
     logger.info("Creating database", user_id=user_id)
-
-    # TODO: Add admin role check here
 
     try:
         result = db.create_database()
@@ -537,7 +532,7 @@ def create_database(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str,
 
 
 @log_handler
-@require_auth
+@require_admin_role
 def reset_database(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
     """
     POST /v1/system/reset-database - WIPE ALL DATA
@@ -549,8 +544,6 @@ def reset_database(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, 
     db = context['db']
 
     logger.warning("DATABASE RESET REQUESTED", user_id=user_id)
-
-    # TODO: Add admin role check here - CRITICAL!
 
     results = {}
     try:

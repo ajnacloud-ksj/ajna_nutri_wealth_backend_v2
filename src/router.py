@@ -47,7 +47,6 @@ ROUTES = [
 
     # Auth
     ('GET', r'^/v1/auth/config$', auth.get_config),
-    ('POST', r'^/v1/auth/invitations/redeem$', auth.redeem_invitation),
 
     # Shopping Lists (before generic data routes)
     ('POST', r'^/v1/shopping-lists$', shopping.create_list),

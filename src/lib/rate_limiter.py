@@ -5,6 +5,7 @@ Pro/subscribed users bypass the limit.
 """
 
 from datetime import datetime, timezone
+from lib.logger import logger
 
 
 FREE_DAILY_LIMIT = 5
@@ -17,12 +18,12 @@ def check_analysis_quota(db, user_id: str) -> tuple:
     """
     try:
         # Check subscription status and admin role
-        sub_sql = (
-            f"SELECT is_subscribed, role FROM app_users "
-            f"WHERE id = '{user_id}' "
-            f"ORDER BY updated_at DESC LIMIT 1"
+        sub_result = db.execute_sql(
+            "SELECT is_subscribed, role FROM app_users "
+            "WHERE id = ? "
+            "ORDER BY updated_at DESC LIMIT 1",
+            params=[user_id]
         )
-        sub_result = db.execute_sql(sub_sql)
         sub_records = sub_result.get('data', {}).get('records', [])
 
         if sub_records:
@@ -32,12 +33,12 @@ def check_analysis_quota(db, user_id: str) -> tuple:
 
         # Count today's analyses from app_api_costs
         today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
-        count_sql = (
-            f"SELECT COUNT(*) AS cnt FROM app_api_costs "
-            f"WHERE user_id = '{user_id}' "
-            f"AND CAST(created_at AS DATE) = '{today}'"
+        count_result = db.execute_sql(
+            "SELECT COUNT(*) AS cnt FROM app_api_costs "
+            "WHERE user_id = ? "
+            "AND CAST(created_at AS DATE) = ?",
+            params=[user_id, today]
         )
-        count_result = db.execute_sql(count_sql)
         count_records = count_result.get('data', {}).get('records', [])
         used_today = int(count_records[0].get('cnt', 0)) if count_records else 0
 
@@ -50,5 +51,5 @@ def check_analysis_quota(db, user_id: str) -> tuple:
 
     except Exception as e:
         # Fail open - don't block users on system errors
-        print(f"Rate limiter error: {e}")
+        logger.warning(f"Rate limiter error: {e}")
         return True, FREE_DAILY_LIMIT, "Quota check bypassed"

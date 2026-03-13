@@ -26,8 +26,3 @@ def get_config(event, context):
             "message": "Using local authentication mode"
         }, event=event)
 
-def redeem_invitation(event, context):
-    """POST /v1/auth/invitations/redeem"""
-    # Placeholder for invitation redemption logic
-    # In real app, we verify the code and update the user record
-    return respond(200, {"status": "success", "message": "Invitation redeemed"}, event=event)

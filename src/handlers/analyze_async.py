@@ -166,13 +166,13 @@ def get_analysis_status(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # extension which reads all data files including new ones.
         # IbexDB updates create new version rows (append-only), so ORDER BY updated_at DESC
         # and LIMIT 1 gets the latest version.
-        sql = (
+        result = db.execute_sql(
             "SELECT id, user_id, status, category, error_message, created_at, updated_at "
             "FROM app_pending_analyses "
-            f"WHERE id = '{entry_id}' AND user_id = '{user_id}' "
-            "ORDER BY updated_at DESC LIMIT 1"
+            "WHERE id = ? AND user_id = ? "
+            "ORDER BY updated_at DESC LIMIT 1",
+            params=[entry_id, user_id]
         )
-        result = db.execute_sql(sql)
 
         if not result.get('success') or not result.get('data', {}).get('records'):
             return respond(404, {"error": "Analysis not found"})
@@ -192,21 +192,15 @@ def get_analysis_status(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             response['category'] = category
 
             # Fetch result data using execute_sql for consistency
-            if category == 'food':
-                food_sql = f"SELECT * FROM app_food_entries_v2 WHERE id = '{entry_id}' LIMIT 1"
-                food_result = db.execute_sql(food_sql)
-                if food_result.get('success') and food_result.get('data', {}).get('records'):
-                    response['result'] = food_result['data']['records'][0]
-            elif category == 'receipt':
-                receipt_sql = f"SELECT * FROM app_receipts WHERE id = '{entry_id}' LIMIT 1"
-                receipt_result = db.execute_sql(receipt_sql)
-                if receipt_result.get('success') and receipt_result.get('data', {}).get('records'):
-                    response['result'] = receipt_result['data']['records'][0]
-            elif category == 'workout':
-                workout_sql = f"SELECT * FROM app_workouts WHERE id = '{entry_id}' LIMIT 1"
-                workout_result = db.execute_sql(workout_sql)
-                if workout_result.get('success') and workout_result.get('data', {}).get('records'):
-                    response['result'] = workout_result['data']['records'][0]
+            table_map = {'food': 'app_food_entries_v2', 'receipt': 'app_receipts', 'workout': 'app_workouts'}
+            table = table_map.get(category)
+            if table:
+                cat_result = db.execute_sql(
+                    f"SELECT * FROM {table} WHERE id = ? LIMIT 1",
+                    params=[entry_id]
+                )
+                if cat_result.get('success') and cat_result.get('data', {}).get('records'):
+                    response['result'] = cat_result['data']['records'][0]
 
         elif status == 'failed':
             response['error'] = record.get('error_message') or record.get('error')
