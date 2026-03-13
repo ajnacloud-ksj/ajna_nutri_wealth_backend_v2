@@ -432,9 +432,9 @@ def upload_csv(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]
                 amt = round(float(r.get('amount', 0)), 2)
                 key = f"{r.get('date')}|{r.get('description')}|{amt}"
                 existing.add(key)
-        print(f"[dedup] Found {len(existing)} existing transactions matching upload dates")
+        logger.info(f"[dedup] Found {len(existing)} existing transactions matching upload dates")
     except Exception as e:
-        print(f"[dedup] SQL query failed, skipping dedup: {e}")
+        logger.warning(f"[dedup] SQL query failed, skipping dedup: {e}")
 
     # Build records, skipping duplicates
     records = []
@@ -477,7 +477,7 @@ def upload_csv(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]
         if result.get('success'):
             total_written += len(batch)
         else:
-            print(f"Error writing batch {i}: {result.get('error')}")
+            logger.error(f"Error writing batch {i}: {result.get('error')}")
 
     # Update or create bank account record
     detected_account = records[0]["source_account"] if records else "Unknown"
@@ -811,7 +811,7 @@ def get_dashboard_data(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[s
         })
 
     except Exception as e:
-        print(f"Error building dashboard: {e}")
+        logger.error(f"Error building dashboard: {e}")
         return respond(500, {"error": str(e)})
 
 

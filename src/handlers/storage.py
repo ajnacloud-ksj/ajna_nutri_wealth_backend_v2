@@ -3,7 +3,7 @@ import uuid
 import os
 import base64
 import boto3
-from datetime import datetime
+from datetime import datetime, timezone
 from utils.http import respond, get_user_id
 from lib.auth_provider import require_auth
 from lib.logger import logger
@@ -30,7 +30,7 @@ def get_upload_url_endpoint(event, context):
         content_type = body.get('content_type', 'image/jpeg')
 
         # Generate unique S3 key
-        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
         unique_id = str(uuid.uuid4())[:8]
         key = f"uploads/{user_id}/{timestamp}_{unique_id}_{filename}"
 
@@ -110,7 +110,7 @@ def upload_file(event, context):
             "mime_type": mime_type,
             "size_bytes": size_bytes,
             "storage_type": "ibex_s3",
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S')
         }
 
         # write to 'images' table with proper table name resolution
@@ -128,7 +128,7 @@ def upload_file(event, context):
             return respond(500, {"error": "Failed to store file metadata"})
 
     except Exception as e:
-        print(f"Upload handler error: {e}")
+        logger.error(f"Upload handler error: {e}")
         return respond(500, {"error": str(e)})
 
 def get_file(event, context):

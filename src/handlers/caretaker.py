@@ -61,35 +61,34 @@ def list_participants(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[st
         if not relationships:
             return respond(200, [])
 
-        # Enrich with participant info from app_users_v4
+        # Batch-fetch participant info to avoid N+1 queries
+        participant_ids = [rel.get('user_id') for rel in relationships if rel.get('user_id')]
+        user_map = {}
+        if participant_ids:
+            try:
+                placeholders = ', '.join(['?' for _ in participant_ids])
+                user_result = db.execute_sql(
+                    f"SELECT id, name, email FROM app_users_v4 "
+                    f"WHERE id IN ({placeholders})",
+                    params=participant_ids
+                )
+                for u in user_result.get('data', {}).get('records', []):
+                    user_map[u.get('id')] = u
+            except Exception as e:
+                logger.warning(f"Batch user lookup failed, falling back: {e}")
+
         participants = []
         for rel in relationships:
             participant_id = rel.get('user_id')
-            participant_info = {"participant_id": participant_id}
-
-            try:
-                user_result = db.query(
-                    'app_users_v4',
-                    filters=[{"field": "id", "operator": "eq", "value": participant_id}],
-                    limit=1,
-                    use_cache=False,
-                    include_deleted=False,
-                )
-                if user_result and user_result.get('success'):
-                    users = user_result.get('data', {}).get('records', [])
-                    if users:
-                        participant_info['name'] = users[0].get('name', '')
-                        participant_info['email'] = users[0].get('email', '')
-            except Exception as e:
-                logger.warning(f"Could not fetch user info for {participant_id}: {e}")
-                participant_info['name'] = ''
-                participant_info['email'] = ''
-
-            participant_info['caretaker_type'] = rel.get('caretaker_type', '')
-            participant_info['permission_level'] = rel.get('permission_level', '')
-            participant_info['created_at'] = rel.get('created_at', '')
-
-            participants.append(participant_info)
+            user_info = user_map.get(participant_id, {})
+            participants.append({
+                "participant_id": participant_id,
+                "name": user_info.get('name', ''),
+                "email": user_info.get('email', ''),
+                "caretaker_type": rel.get('caretaker_type', ''),
+                "permission_level": rel.get('permission_level', ''),
+                "created_at": rel.get('created_at', ''),
+            })
 
         return respond(200, participants)
 

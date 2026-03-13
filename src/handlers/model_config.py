@@ -7,8 +7,11 @@ import json
 from utils.http import respond
 from lib.model_manager import get_model_manager
 from lib.logger import logger
+from lib.auth_provider import require_auth
+from lib.auth_provider_enhanced import require_admin_role
 
 
+@require_auth
 def list_model_configs(event, context):
     """
     GET /v1/models/config - List all model configurations
@@ -44,6 +47,7 @@ def list_model_configs(event, context):
         return respond(500, {"error": str(e)})
 
 
+@require_auth
 def get_model_config(event, context):
     """
     GET /v1/models/config/{use_case} - Get specific model configuration
@@ -76,6 +80,7 @@ def get_model_config(event, context):
         return respond(500, {"error": str(e)})
 
 
+@require_admin_role
 def update_model_config(event, context):
     """
     PUT /v1/models/config/{use_case} - Update model configuration
@@ -85,12 +90,6 @@ def update_model_config(event, context):
         use_case = event.get('pathParameters', {}).get('use_case')
         if not use_case:
             return respond(400, {"error": "Use case required"})
-
-        # Check admin authorization
-        # TODO: Add proper admin auth check
-        auth_header = event.get('headers', {}).get('Authorization', '')
-        if not auth_header.startswith('Bearer admin-'):
-            return respond(403, {"error": "Admin authorization required"})
 
         body = json.loads(event.get('body', '{}'))
         if not body:
@@ -141,6 +140,7 @@ def update_model_config(event, context):
         return respond(500, {"error": str(e)})
 
 
+@require_auth
 def list_available_models(event, context):
     """
     GET /v1/models/available - List all available models per provider
@@ -176,6 +176,7 @@ def list_available_models(event, context):
         return respond(500, {"error": str(e)})
 
 
+@require_admin_role
 def test_model(event, context):
     """
     POST /v1/models/test - Test a model configuration

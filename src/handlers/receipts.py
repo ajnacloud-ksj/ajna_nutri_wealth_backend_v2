@@ -5,6 +5,7 @@ Receipt handlers - Fetch receipts with joined items
 import json
 from utils.http import respond, get_user_id
 from lib.auth_provider import require_auth
+from lib.logger import logger
 
 
 @require_auth
@@ -53,7 +54,7 @@ def get_receipt_with_items(event, context):
         return respond(200, receipt)
         
     except Exception as e:
-        print(f"Error fetching receipt: {e}")
+        logger.error(f"Error fetching receipt: {e}")
         return respond(500, {"error": str(e)})
 
 
@@ -85,7 +86,7 @@ def _transform_receipt_image(db, receipt):
                 receipt['image_url'] = ''
                 receipt['has_image'] = True
             except Exception as e:
-                print(f"Error generating presigned URL: {e}")
+                logger.error(f"Error generating presigned URL: {e}")
                 receipt['image_url'] = ''
                 receipt['has_image'] = True
         elif image_url.startswith('s3://'):
@@ -103,7 +104,7 @@ def _transform_receipt_image(db, receipt):
                 receipt['image_url'] = ''
                 receipt['has_image'] = True
             except Exception as e:
-                print(f"Error generating presigned URL: {e}")
+                logger.error(f"Error generating presigned URL: {e}")
                 receipt['image_url'] = ''
                 receipt['has_image'] = True
         elif image_url.startswith('http://') or image_url.startswith('https://'):
@@ -142,5 +143,5 @@ def list_receipts(event, context):
             return respond(500, {"error": "Failed to fetch receipts"})
 
     except Exception as e:
-        print(f"Error listing receipts: {e}")
+        logger.error(f"Error listing receipts: {e}")
         return respond(500, {"error": str(e)})
