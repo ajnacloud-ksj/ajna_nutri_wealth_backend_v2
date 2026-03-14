@@ -4,11 +4,12 @@ Counts today's AI analyses via app_api_costs table (single source of truth).
 Pro/subscribed users bypass the limit.
 """
 
+import os
 from datetime import datetime, timezone
 from lib.logger import logger
 
 
-FREE_DAILY_LIMIT = 5
+FREE_DAILY_LIMIT = int(os.environ.get('FREE_DAILY_LIMIT', '10'))
 
 
 def check_analysis_quota(db, user_id: str) -> tuple:
@@ -17,12 +18,12 @@ def check_analysis_quota(db, user_id: str) -> tuple:
     Returns (allowed: bool, remaining: int, message: str)
     """
     try:
-        # Check subscription status and admin role
-        sub_result = db.execute_sql(
-            "SELECT is_subscribed, role FROM app_users_v4 "
-            "WHERE id = ? "
-            "ORDER BY updated_at DESC LIMIT 1",
-            params=[user_id]
+        # Check subscription status and admin role using db.query()
+        # (execute_sql via Iceberg may not see all columns)
+        sub_result = db.query(
+            "app_users_v4",
+            filters=[{"field": "id", "operator": "eq", "value": user_id}],
+            limit=1
         )
         sub_records = sub_result.get('data', {}).get('records', [])
 
@@ -33,14 +34,17 @@ def check_analysis_quota(db, user_id: str) -> tuple:
 
         # Count today's analyses from app_api_costs
         today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
-        count_result = db.execute_sql(
-            "SELECT COUNT(*) AS cnt FROM app_api_costs "
-            "WHERE user_id = ? "
-            "AND CAST(created_at AS DATE) = ?",
-            params=[user_id, today]
+        count_result = db.query(
+            "app_api_costs",
+            filters=[
+                {"field": "user_id", "operator": "eq", "value": user_id},
+                {"field": "created_at", "operator": "gte", "value": today + "T00:00:00"},
+                {"field": "created_at", "operator": "lt", "value": today + "T23:59:59"}
+            ],
+            limit=1000
         )
         count_records = count_result.get('data', {}).get('records', [])
-        used_today = int(count_records[0].get('cnt', 0)) if count_records else 0
+        used_today = len(count_records)
 
         remaining = max(0, FREE_DAILY_LIMIT - used_today)
 

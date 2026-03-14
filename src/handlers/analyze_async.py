@@ -6,7 +6,7 @@ from typing import Dict, Any, Optional
 from lib.auth_provider import get_user_id, require_auth
 from ajna_cloud import logger, respond
 from lib.ai_optimized import OptimizedAIService
-from lib.rate_limiter import check_analysis_quota
+from lib.rate_limiter import check_analysis_quota, FREE_DAILY_LIMIT
 from utils.timestamps import utc_now, utc_date
 import boto3
 
@@ -97,7 +97,7 @@ def submit_analysis(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             return respond(429, {
                 "error": quota_msg,
                 "remaining": 0,
-                "daily_limit": 5
+                "daily_limit": FREE_DAILY_LIMIT
             })
 
         entry_id = str(uuid.uuid4())
@@ -155,7 +155,7 @@ def submit_analysis(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             "sqs_message_id": sqs_response['MessageId'],
             "quota": {
                 "remaining": remaining - 1,
-                "daily_limit": 5
+                "daily_limit": FREE_DAILY_LIMIT
             }
         })
 

@@ -37,13 +37,10 @@ def ensure_user_exists(user_id: str, user_claims: Dict[str, Any], db) -> bool:
 
             if records:
                 # User exists, update last seen
-                logger.info(f"User {user_id} exists, updating last seen")
-
                 db.update(
                     "app_users_v4",
                     filters=[{"field": "id", "operator": "eq", "value": user_id}],
                     updates={
-                        "last_usage_date": utc_now(),
                         "updated_at": utc_now()
                     }
                 )
@@ -55,8 +52,6 @@ def ensure_user_exists(user_id: str, user_claims: Dict[str, Any], db) -> bool:
 
         # Check for custom attributes (Cognito custom attributes are prefixed with 'custom:')
         role = user_claims.get('custom:role', 'participant')
-        user_type = user_claims.get('custom:user_type', 'regular')
-
         # For first user in system, make them admin
         # Check if this is the first user
         all_users_result = db.query("app_users_v4", limit=1)
@@ -69,14 +64,10 @@ def ensure_user_exists(user_id: str, user_claims: Dict[str, Any], db) -> bool:
         user_data = {
             "id": user_id,
             "email": email,
-            "full_name": full_name,
+            "name": full_name,
             "role": role,
-            "user_type": user_type,
-            "is_subscribed": False,
-            "trial_used_today": 0,
             "created_at": utc_now(),
-            "updated_at": utc_now(),
-            "last_usage_date": utc_now()
+            "updated_at": utc_now()
         }
 
         logger.info(f"Creating new user: {email} with role: {role}")
