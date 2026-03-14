@@ -20,7 +20,10 @@ from ajna_cloud.ibex import (
 logger = logging.getLogger(__name__)
 
 # Configure app-specific tables that should never be cached
-NEVER_CACHE_TABLES.update({'app_pending_analyses', 'food_entries'})
+NEVER_CACHE_TABLES.update({
+    'app_pending_analyses', 'food_entries',
+    'app_shopping_lists', 'app_shopping_list_items',
+})
 
 
 class OptimizedIbexClient(_SDKClient):
