@@ -32,24 +32,26 @@ def list_users_admin(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str
         if role_filter:
             kwargs["filters"] = [{"field": "role", "operator": "eq", "value": role_filter}]
 
-        result = db.query("users_v4", use_cache=False, include_deleted=False, **kwargs)
+        # Show ALL users including archived/deleted for admin view
+        # include_deleted=False in db.query means "exclude deleted" — we default to showing all
+        show_deleted = query_params.get('include_deleted', 'true').lower() == 'true'
+        result = db.query("app_users_v4", use_cache=False, include_deleted=show_deleted, **kwargs)
 
         if result and result.get('success'):
             data = result.get('data', {})
             records = data.get('records', [])
 
             # Include all user fields for admin view
+            # Actual app_users_v4 fields: id, email, name, role, created_at, updated_at
             users = []
             for record in records:
                 users.append({
                     "id": record.get('id'),
                     "email": record.get('email'),
-                    "full_name": record.get('full_name'),
+                    "name": record.get('name', ''),
                     "role": record.get('role', 'participant'),
-                    "user_type": record.get('user_type', 'regular'),
-                    "is_subscribed": record.get('is_subscribed', False),
-                    "trial_used_today": record.get('trial_used_today', 0),
-                    "last_usage_date": record.get('last_usage_date'),
+                    "subscription_tier": record.get('subscription_tier', 'free'),
+                    "is_archived": record.get('_deleted', False),
                     "created_at": record.get('created_at'),
                     "updated_at": record.get('updated_at')
                 })
@@ -104,7 +106,7 @@ def update_user_role(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str
 
         # Update user role
         result = db.update(
-            "users_v4",
+            "app_users_v4",
             filters=[{"field": "id", "operator": "eq", "value": user_id}],
             updates={
                 "role": new_role,
@@ -147,7 +149,7 @@ def toggle_user_status(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[s
 
         # Update user status
         result = db.update(
-            "users_v4",
+            "app_users_v4",
             filters=[{"field": "id", "operator": "eq", "value": user_id}],
             updates={
                 "is_active": is_active,
@@ -180,7 +182,7 @@ def get_system_stats(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str
         db = context['db']
 
         # Get user counts by role
-        users_result = db.query("users_v4", limit=1000, use_cache=False, include_deleted=False)
+        users_result = db.query("app_users_v4", limit=1000, use_cache=False, include_deleted=False)
         user_stats = {
             "total": 0,
             "admins": 0,

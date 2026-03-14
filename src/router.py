@@ -23,6 +23,7 @@ from src.handlers import caretaker  # Caretaker data access
 from src.handlers import invitations  # Invitation code management
 from src.handlers import relationships  # Relationship management
 from src.handlers import permissions_mgmt  # Permissions management
+from src.handlers import admin  # Admin user/system management
 # from src.handlers import user  # User profile management - COMMENTED OUT UNTIL DEPLOYED
 
 # Note: Using improved analyze handler with two-stage AI processing
@@ -45,6 +46,13 @@ ROUTES = [
     ('DELETE', r'^/v1/admin/database/cleanup$', database_admin.cleanup_database),
     ('POST', r'^/v1/admin/database/reset$', database_admin.reset_database),
     ('GET', r'^/v1/admin/database/health$', database_admin.database_health_check),
+
+    # Admin User & System Management
+    ('GET', r'^/v1/admin/users$', admin.list_users_admin),
+    ('PUT', r'^/v1/admin/users/(?P<user_id>[a-zA-Z0-9-]+)/role$', admin.update_user_role),
+    ('PUT', r'^/v1/admin/users/(?P<user_id>[a-zA-Z0-9-]+)/status$', admin.toggle_user_status),
+    ('GET', r'^/v1/admin/stats$', admin.get_system_stats),
+    ('PUT', r'^/v1/admin/models/config/(?P<use_case>[a-zA-Z0-9_]+)$', admin.update_model_config_admin),
 
     # Auth
     ('GET', r'^/v1/auth/config$', auth.get_config),
