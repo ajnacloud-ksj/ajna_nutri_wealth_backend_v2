@@ -48,6 +48,16 @@ def _transcribe_whisper(tmp_path: str) -> Dict[str, Any]:
     """Transcribe using OpenAI Whisper"""
     client = _get_openai_client()
 
+    # Whisper requires a recognized extension. If the file has an unrecognized extension,
+    # rename it to .webm (the most common browser recording format).
+    import shutil
+    ext = os.path.splitext(tmp_path)[1].lower()
+    valid_exts = {'.flac', '.m4a', '.mp3', '.mp4', '.mpeg', '.mpga', '.oga', '.ogg', '.wav', '.webm'}
+    if ext not in valid_exts:
+        new_path = tmp_path + '.webm'
+        shutil.copy2(tmp_path, new_path)
+        tmp_path = new_path
+
     with open(tmp_path, 'rb') as audio_file:
         transcription = client.audio.transcriptions.create(
             model="whisper-1",

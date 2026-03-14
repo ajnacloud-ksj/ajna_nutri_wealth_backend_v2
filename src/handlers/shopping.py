@@ -401,7 +401,7 @@ def add_items(event, context):
                 "estimated_price": item.get('estimated_price', 0),
                 "actual_price": 0,
                 "store_recommendation": "",
-                "is_purchased": False,
+                "is_purchased": "false",
                 "priority": "normal",
                 "notes": "",
                 "added_via": "text" if text else "manual",
@@ -447,6 +447,10 @@ def update_item(event, context):
 
         if not updates:
             return respond(400, {"error": "No valid fields to update"})
+
+        # IbexDB stores is_purchased as string — convert bool to string
+        if 'is_purchased' in updates:
+            updates['is_purchased'] = str(updates['is_purchased']).lower()
 
         updates['updated_at'] = utc_now()
 
@@ -1028,7 +1032,7 @@ def reconcile_receipt_with_shopping_lists(db, user_id: str, receipt_items: List[
                 db.update("app_shopping_list_items",
                           filters=[{"field": "id", "operator": "eq", "value": si['id']}],
                           updates={
-                              "is_purchased": True,
+                              "is_purchased": "true",
                               "actual_price": si.get('estimated_price', 0),
                               "store_recommendation": vendor,
                               "updated_at": now
