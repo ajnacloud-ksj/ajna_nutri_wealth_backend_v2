@@ -58,6 +58,7 @@ ROUTES = [
     ('POST', r'^/v1/shopping-lists/(?P<id>[a-zA-Z0-9-]+)/items$', shopping.add_items),
     ('PUT', r'^/v1/shopping-lists/(?P<id>[a-zA-Z0-9-]+)/items/(?P<item_id>[a-zA-Z0-9-]+)$', shopping.update_item),
     ('DELETE', r'^/v1/shopping-lists/(?P<id>[a-zA-Z0-9-]+)/items/(?P<item_id>[a-zA-Z0-9-]+)$', shopping.delete_item),
+    ('POST', r'^/v1/shopping-lists/optimize$', shopping.optimize_all),
     ('POST', r'^/v1/shopping-lists/(?P<id>[a-zA-Z0-9-]+)/prepare$', shopping.prepare_list),
 
     # Bank Statements (before generic data routes)

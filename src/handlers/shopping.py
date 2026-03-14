@@ -902,6 +902,305 @@ Create a store-grouped purchase plan. Group items by the best store based on thi
         return respond(500, {"error": str(e)})
 
 
+# ---------- Optimize All ----------
+
+@require_auth
+def optimize_all(event, context):
+    """
+    POST /v1/shopping-lists/optimize - Cross-list AI Optimization
+
+    Gathers unpurchased items from ALL active shopping lists, deduplicates,
+    runs AI optimization, and creates a NEW optimized shopping list.
+    The new list is a real, checkable list the user can take to the store.
+    """
+    db = context['db']
+    user_id = get_user_id(event) or 'local-dev-user'
+
+    try:
+        # 1. Fetch all active shopping lists
+        lists_result = db.query("app_shopping_lists", filters=[
+            {"field": "user_id", "operator": "eq", "value": user_id},
+            {"field": "status", "operator": "eq", "value": "active"}
+        ], limit=50)
+
+        if not lists_result.get('success'):
+            return respond(500, {"error": "Failed to fetch shopping lists"})
+
+        active_lists = lists_result.get('data', {}).get('records', [])
+        if not active_lists:
+            return respond(400, {"error": "No active shopping lists found"})
+
+        # 2. Gather unpurchased items from all lists
+        all_items = []
+        source_lists = []
+        for lst in active_lists:
+            list_id = lst['id']
+            items_result = db.query("app_shopping_list_items", filters=[
+                {"field": "list_id", "operator": "eq", "value": list_id}
+            ], limit=200)
+
+            if items_result.get('success'):
+                for item in items_result.get('data', {}).get('records', []):
+                    purchased = item.get('is_purchased', False)
+                    if isinstance(purchased, str):
+                        purchased = purchased.lower() == 'true'
+                    if not purchased:
+                        item['_source_list'] = lst.get('name', 'Unknown')
+                        all_items.append(item)
+                        if list_id not in source_lists:
+                            source_lists.append(list_id)
+
+        if not all_items:
+            return respond(400, {"error": "No unpurchased items across any shopping list"})
+
+        # 3. Deduplicate: merge items with same name (sum quantities)
+        merged = {}
+        for item in all_items:
+            key = (item.get('name', '').strip().lower(), item.get('unit', '').strip().lower())
+            if key in merged:
+                merged[key]['quantity'] = (merged[key].get('quantity', 1) or 1) + (item.get('quantity', 1) or 1)
+            else:
+                merged[key] = {
+                    "name": item.get('name', ''),
+                    "quantity": item.get('quantity', 1) or 1,
+                    "unit": item.get('unit', ''),
+                    "category": item.get('category', 'other'),
+                    "estimated_price": item.get('estimated_price', 0) or 0,
+                }
+
+        deduped_items = list(merged.values())
+        logger.info(f"Optimize all: {len(all_items)} items from {len(source_lists)} lists → {len(deduped_items)} unique items")
+
+        # 4. Build price index + vector matches (reuse existing helpers)
+        price_index = _build_store_price_index(db, user_id, days=180)
+        vector_matches = _find_vector_matches(db, deduped_items, days=90)
+
+        # 5. Fetch food nutrition history
+        food_history = []
+        try:
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=90)).strftime('%Y-%m-%dT%H:%M:%S')
+            food_result = db.query("app_food_entries_v2", filters=[
+                {"field": "user_id", "operator": "eq", "value": user_id},
+                {"field": "created_at", "operator": "gte", "value": cutoff}
+            ], sort=[{"field": "created_at", "order": "desc"}], limit=50)
+            if food_result.get('success'):
+                food_history = food_result.get('data', {}).get('records', [])
+        except Exception as e:
+            logger.warning(f"Could not fetch food history: {e}")
+
+        # 6. Build AI context (same pattern as prepare_list)
+        items_text = json.dumps([{
+            "name": i["name"], "quantity": i["quantity"],
+            "unit": i["unit"], "category": i["category"],
+            "current_estimate": i["estimated_price"]
+        } for i in deduped_items], indent=2)
+
+        store_profiles = []
+        for store, info in price_index["stores"].items():
+            last = info.get("last_visit", "")
+            days_ago = ""
+            if last:
+                try:
+                    last_dt = datetime.fromisoformat(last.replace('Z', '+00:00'))
+                    delta = (datetime.now(timezone.utc) - last_dt).days
+                    days_ago = f"{delta} days ago"
+                except Exception:
+                    days_ago = last
+            store_profiles.append(
+                f"- {store}: {info['visit_count']} visits, ${info['total_spent']:.0f} total spent, "
+                f"last visit: {days_ago}"
+                + (f", location: {info.get('city', '')}, {info.get('state', '')}" if info.get('city') else "")
+            )
+        stores_text = "\n".join(store_profiles) if store_profiles else "No store history available."
+
+        price_lines = []
+        for item in deduped_items:
+            name = item["name"]
+            name_lower = name.lower()
+            matches_found = []
+            for key, prices in price_index["item_prices"].items():
+                if name_lower in key or key in name_lower:
+                    for p in prices[:3]:
+                        matches_found.append(p)
+            if name in vector_matches:
+                for vm in vector_matches[name]:
+                    matches_found.append({
+                        "store": vm.get("store_name", "unknown"),
+                        "price": vm.get("unit_price", 0),
+                        "date": "",
+                        "name_original": vm.get("item_name", ""),
+                    })
+            if matches_found:
+                store_prices = {}
+                for m in matches_found:
+                    store = m.get("store", "Unknown")
+                    price = m.get("price", 0)
+                    if store not in store_prices or price < store_prices[store]["price"]:
+                        store_prices[store] = {"price": price, "date": m.get("date", ""), "matched": m.get("name_original", "")}
+                price_parts = []
+                for store, info in store_prices.items():
+                    part = f"${info['price']:.2f} at {store}"
+                    if info.get("date"):
+                        part += f" ({info['date'][:10]})"
+                    if info.get("matched") and info["matched"].lower() != name_lower:
+                        part += f" [matched: {info['matched']}]"
+                    price_parts.append(part)
+                price_lines.append(f"- {name}: {', '.join(price_parts)}")
+            else:
+                price_lines.append(f"- {name}: no purchase history found")
+        price_history_text = "\n".join(price_lines)
+
+        nutrition_text = ""
+        if food_history:
+            food_names = list(set(f.get('food_name', '') or f.get('name', '') for f in food_history[:30] if f.get('food_name') or f.get('name')))
+            nutrition_text = f"User's recently consumed foods: {', '.join(food_names[:20])}"
+
+        loc = price_index.get("user_location", {})
+        location_text = ""
+        if loc.get("city") or loc.get("state"):
+            location_text = f"User's area: {loc.get('city', '')}, {loc.get('state', '')} {loc.get('postal_code', '')}"
+
+        # 7. Call AI
+        client, config = _get_ai_client()
+
+        system_prompt = (
+            "You are a smart shopping assistant that creates store-grouped purchase plans "
+            "optimized for BOTH cost AND health quality.\n\n"
+            "You are optimizing items gathered from MULTIPLE shopping lists into ONE efficient plan.\n\n"
+            "Given a consolidated shopping list, the user's actual store visit history, item price history "
+            "from their receipts, and their recent food/nutrition history, create an optimized plan:\n\n"
+            "COST OPTIMIZATION:\n"
+            "1. Group items by the BEST STORE based on the user's actual purchase history and prices\n"
+            "2. Use REAL PRICES from receipt history (adjusted slightly for inflation if old)\n"
+            "3. Order store stops by most items first (minimize trips)\n"
+            "4. For items with no history, estimate prices and suggest a likely store\n\n"
+            "HEALTH & QUALITY:\n"
+            "5. Flag unhealthy items in the 'notes' field (e.g. high sodium, processed, high sugar)\n"
+            "6. For unhealthy items, ALWAYS suggest a healthier alternative in the 'alternative' field\n"
+            "7. In 'nutrition_notes', give practical health tips based on the overall list balance\n"
+            "8. Consider the user's recent food history — if they're eating too much of something, note it\n\n"
+            "Be practical and specific. Use the actual store names from the user's history."
+        )
+
+        user_prompt = f"""CONSOLIDATED SHOPPING LIST (from {len(source_lists)} lists, {len(all_items)} total items, deduplicated to {len(deduped_items)}):
+{items_text}
+
+USER'S STORES (from receipt history, last 6 months):
+{stores_text}
+
+PRICE HISTORY (from user's receipts):
+{price_history_text}
+
+{nutrition_text}
+{location_text}
+
+Create a store-grouped purchase plan. Group items by the best store based on this user's actual shopping patterns and prices."""
+
+        response = client.chat.completions.create(
+            model=config.model_name,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.3,
+            **config.token_kwargs(4096),
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "purchase_plan",
+                    "strict": True,
+                    "schema": PURCHASE_PLAN_SCHEMA
+                }
+            }
+        )
+
+        prepare_result = json.loads(response.choices[0].message.content)
+        tokens_used = response.usage.total_tokens
+        _log_shopping_cost(db, user_id, "optimize_all", tokens_used, config)
+
+        # 8. Create a new optimized shopping list
+        now = utc_now()
+        date_label = datetime.now(timezone.utc).strftime('%b %d, %Y')
+        new_list_id = str(uuid.uuid4())
+        new_list_name = f"Optimized Plan - {date_label}"
+
+        db.write("app_shopping_lists", [{
+            "id": new_list_id,
+            "user_id": user_id,
+            "name": new_list_name,
+            "status": "active",
+            "item_count": 0,
+            "estimated_total": prepare_result.get('estimated_total', 0),
+            "notes": prepare_result.get('summary', ''),
+            "created_at": now,
+            "updated_at": now
+        }])
+
+        # 9. Write optimized items from store_stops into the new list
+        item_records = []
+        for stop in prepare_result.get('store_stops', []):
+            store_name = stop.get('store_name', '')
+            for si in stop.get('items', []):
+                item_records.append({
+                    "id": str(uuid.uuid4()),
+                    "list_id": new_list_id,
+                    "user_id": user_id,
+                    "name": si.get('name', ''),
+                    "quantity": si.get('quantity', 1),
+                    "unit": si.get('unit', ''),
+                    "category": si.get('category', 'other'),
+                    "estimated_price": si.get('estimated_price', 0),
+                    "actual_price": 0,
+                    "store_recommendation": store_name,
+                    "is_purchased": "false",
+                    "priority": "normal",
+                    "notes": si.get('notes', ''),
+                    "added_via": "ai_optimize",
+                    "created_at": now,
+                    "updated_at": now
+                })
+
+        if item_records:
+            db.write("app_shopping_list_items", item_records)
+
+        # Update list totals
+        total = sum(
+            (r.get('estimated_price', 0) or 0) * (r.get('quantity', 1) or 1)
+            for r in item_records
+        )
+        db.update("app_shopping_lists",
+                  filters=[{"field": "id", "operator": "eq", "value": new_list_id}],
+                  updates={
+                      "item_count": len(item_records),
+                      "estimated_total": round(total, 2),
+                      "updated_at": now
+                  })
+
+        logger.info(f"Optimize all: created list '{new_list_name}' ({new_list_id}) with "
+                     f"{len(item_records)} items, ${total:.2f} total, {tokens_used} tokens")
+
+        return respond(200, {
+            "list_id": new_list_id,
+            "list_name": new_list_name,
+            "preparation": prepare_result,
+            "source_lists": len(source_lists),
+            "original_items": len(all_items),
+            "deduplicated_items": len(deduped_items),
+            "optimized_items": len(item_records),
+            "metadata": {
+                "tokens_used": tokens_used,
+                "stores_in_history": len(price_index["stores"]),
+                "items_in_price_index": len(price_index["item_prices"]),
+                "vector_matches": len(vector_matches),
+                "food_history_items": len(food_history),
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"Error in optimize_all: {e}", exc_info=True)
+        return respond(500, {"error": str(e)})
+
+
 # ---------- Helpers ----------
 
 def _update_list_totals(db, user_id: str, list_id: str):
