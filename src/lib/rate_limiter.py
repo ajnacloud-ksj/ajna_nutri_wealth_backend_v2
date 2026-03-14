@@ -29,7 +29,7 @@ def check_analysis_quota(db, user_id: str) -> tuple:
 
         if sub_records:
             user = sub_records[0]
-            if user.get('is_subscribed') or user.get('role') == 'admin':
+            if user.get('is_subscribed') or user.get('role') == 'admin' or user.get('subscription_tier') == 'pro':
                 return True, 999, "Unlimited access"
 
         # Count today's analyses from app_api_costs
