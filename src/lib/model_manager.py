@@ -51,7 +51,7 @@ class ModelManager:
         "classifier": ModelConfig(
             use_case="classifier",
             provider="openai",
-            model_name="gpt-4o-mini",
+            model_name="gpt-5-mini",
             base_url="https://api.openai.com/v1",
             temperature=0.0,
             max_tokens=100,
@@ -62,7 +62,7 @@ class ModelManager:
         "food": ModelConfig(
             use_case="food",
             provider="openai",
-            model_name="gpt-4o-mini",
+            model_name="gpt-5-mini",
             base_url="https://api.openai.com/v1",
             temperature=0.0,
             max_tokens=2048,
@@ -75,7 +75,7 @@ class ModelManager:
         "receipt": ModelConfig(
             use_case="receipt",
             provider="openai",
-            model_name="gpt-4o-mini",
+            model_name="gpt-5-mini",
             base_url="https://api.openai.com/v1",
             temperature=0.0,
             max_tokens=4096,
@@ -88,7 +88,7 @@ class ModelManager:
         "workout": ModelConfig(
             use_case="workout",
             provider="openai",
-            model_name="gpt-4o-mini",
+            model_name="gpt-5-mini",
             base_url="https://api.openai.com/v1",
             temperature=0.0,
             max_tokens=2048,
@@ -99,7 +99,7 @@ class ModelManager:
         "shopping": ModelConfig(
             use_case="shopping",
             provider="openai",
-            model_name="gpt-5-mini",
+            model_name="gpt-5.4",
             base_url="https://api.openai.com/v1",
             temperature=0.3,
             max_tokens=4096,
@@ -367,6 +367,7 @@ class ModelManager:
         """List available models per provider"""
         return {
             "openai": [
+                "gpt-5.4",
                 "gpt-5-mini",
                 "gpt-4o-mini",
                 "gpt-4o",
