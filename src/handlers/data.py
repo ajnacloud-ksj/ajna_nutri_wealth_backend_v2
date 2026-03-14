@@ -391,7 +391,7 @@ def update_data(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any
 
         if result and result.get('success'):
             # Get updated record
-            get_result = db.query(db_table_name, filters=[{"field": "id", "operator": "eq", "value": item_id}], limit=1, use_cache=False)
+            get_result = db.query(db_table_name, filters=[{"field": "id", "operator": "eq", "value": item_id}], limit=1, use_cache=False, include_deleted=False)
 
             if get_result and get_result.get('success'):
                 records = get_result.get('data', {}).get('records', [])

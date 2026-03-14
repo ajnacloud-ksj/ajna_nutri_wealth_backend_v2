@@ -39,7 +39,7 @@ def ready(event, context):
         if db:
             try:
                 # Try a simple query to verify database is accessible
-                result = db.query('users', limit=1)
+                result = db.query('app_users_v4', limit=1, include_deleted=False)
                 checks['database'] = result.get('success', False)
             except Exception as e:
                 logger.warning(f"Database check failed: {e}")

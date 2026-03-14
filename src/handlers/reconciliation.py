@@ -289,7 +289,7 @@ def _match_receipts(db, user_id: str) -> Tuple[List[Dict[str, Any]], List[Dict[s
     # Query receipts
     sql_receipts = f"""
         SELECT
-            id, store_name, total_amount, receipt_date, image_url, created_at
+            id, vendor, total_amount, receipt_date, image_url, created_at
         FROM app_receipts
         WHERE user_id = '{user_id}'
         ORDER BY receipt_date DESC
@@ -323,7 +323,7 @@ def _match_receipts(db, user_id: str) -> Tuple[List[Dict[str, Any]], List[Dict[s
         receipt_id = receipt.get('id')
         receipt_date = receipt.get('receipt_date', '')
         receipt_amount = float(receipt.get('total_amount', 0))
-        store_name = (receipt.get('store_name', '') or '').upper()
+        vendor = (receipt.get('vendor', '') or '').upper()
 
         try:
             receipt_dt = datetime.strptime(receipt_date, '%Y-%m-%d')
@@ -377,12 +377,12 @@ def _match_receipts(db, user_id: str) -> Tuple[List[Dict[str, Any]], List[Dict[s
                 confidence += 0.1
 
             # Merchant name match
-            if store_name and merchant:
-                if store_name == merchant:
+            if vendor and merchant:
+                if vendor == merchant:
                     confidence += 0.3
-                elif store_name in merchant or merchant in store_name:
+                elif vendor in merchant or merchant in vendor:
                     confidence += 0.2
-                elif any(word in merchant for word in store_name.split() if len(word) > 3):
+                elif any(word in merchant for word in vendor.split() if len(word) > 3):
                     confidence += 0.1
 
             if confidence > best_confidence:
@@ -390,7 +390,7 @@ def _match_receipts(db, user_id: str) -> Tuple[List[Dict[str, Any]], List[Dict[s
                 best_match = {
                     "receipt": {
                         "id": receipt_id,
-                        "store_name": receipt.get('store_name', ''),
+                        "vendor": receipt.get('vendor', ''),
                         "total_amount": round(receipt_amount, 2),
                         "receipt_date": receipt_date,
                         "image_url": receipt.get('image_url', ''),
@@ -418,7 +418,7 @@ def _match_receipts(db, user_id: str) -> Tuple[List[Dict[str, Any]], List[Dict[s
     unmatched = [
         {
             "id": r.get('id'),
-            "store_name": r.get('store_name', ''),
+            "vendor": r.get('vendor', ''),
             "total_amount": round(float(r.get('total_amount', 0)), 2),
             "receipt_date": r.get('receipt_date', ''),
             "image_url": r.get('image_url', ''),
