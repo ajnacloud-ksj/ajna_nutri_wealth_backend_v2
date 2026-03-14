@@ -314,7 +314,7 @@ def update_model_config_admin(event: Dict[str, Any], context: Dict[str, Any]) ->
         return respond(500, {"error": str(e)}, event=event)
 
 
-# Allowed API key env vars that can be managed from admin UI
+# Managed API key names (stored in IbexDB app_api_keys table)
 MANAGED_API_KEYS = {
     'OPENAI_API_KEY': 'OpenAI',
     'GROQ_API_KEY': 'Groq',
@@ -327,17 +327,29 @@ MANAGED_API_KEYS = {
 @require_admin_role
 def get_api_keys(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
     """
-    GET /v1/admin/api-keys - List configured API keys (masked) (admin only)
+    GET /v1/admin/api-keys - List configured API keys (masked) from IbexDB (admin only)
+    Keys are stored in app_api_keys table, loaded on cold start and cached in-memory.
     """
     try:
+        db = context['db']
+
+        # Query all keys from IbexDB
+        result = db.query("app_api_keys", limit=100, use_cache=False, include_deleted=False)
+        stored_keys = {}
+        if result and result.get('success'):
+            for record in result.get('data', {}).get('records', []):
+                stored_keys[record.get('key_name')] = record.get('key_value', '')
+
         keys = []
-        for env_var, provider_name in MANAGED_API_KEYS.items():
-            value = os.environ.get(env_var, '')
+        for key_name, provider_name in MANAGED_API_KEYS.items():
+            # Check IbexDB first, then fall back to env var
+            value = stored_keys.get(key_name) or os.environ.get(key_name, '')
             keys.append({
-                "env_var": env_var,
+                "key_name": key_name,
                 "provider": provider_name,
                 "is_set": bool(value),
                 "masked_value": f"{value[:4]}...{value[-4:]}" if len(value) > 8 else ("****" if value else ""),
+                "source": "database" if key_name in stored_keys and stored_keys[key_name] else ("env" if os.environ.get(key_name) else "not_set"),
             })
 
         return respond(200, {"api_keys": keys}, event=event)
@@ -350,12 +362,12 @@ def get_api_keys(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, An
 @require_admin_role
 def update_api_keys(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
     """
-    PUT /v1/admin/api-keys - Update API keys on Lambda env vars (admin only)
+    PUT /v1/admin/api-keys - Update API keys in IbexDB (admin only)
     Body: { "keys": { "OPENAI_API_KEY": "sk-...", "GROQ_API_KEY": "gsk_..." } }
+    Keys are stored in app_api_keys table and loaded into os.environ on cold start.
     """
     try:
-        import boto3
-
+        db = context['db']
         body = json.loads(event.get('body', '{}'))
         keys_to_update = body.get('keys', {})
 
@@ -369,39 +381,32 @@ def update_api_keys(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str,
                     "error": f"Invalid key: {key}. Allowed: {', '.join(MANAGED_API_KEYS.keys())}"
                 }, event=event)
 
-        # Get current Lambda function name
-        function_name = os.environ.get('AWS_LAMBDA_FUNCTION_NAME')
-        if not function_name:
-            return respond(500, {"error": "Cannot determine Lambda function name"}, event=event)
-
-        # Update Lambda environment variables
-        lambda_client = boto3.client('lambda', region_name=os.environ.get('AWS_REGION', 'ap-south-1'))
-
-        # Get current config
-        current_config = lambda_client.get_function_configuration(FunctionName=function_name)
-        current_env = current_config.get('Environment', {}).get('Variables', {})
-
-        # Merge new keys (only update provided ones, keep others)
-        updated_env = {**current_env}
         updated_keys = []
-        for key, value in keys_to_update.items():
-            if value:  # Don't set empty values
-                updated_env[key] = value
-                updated_keys.append(key)
+        for key_name, key_value in keys_to_update.items():
+            if not key_value:
+                continue
 
-        # Apply update
-        lambda_client.update_function_configuration(
-            FunctionName=function_name,
-            Environment={'Variables': updated_env}
-        )
+            # Upsert into app_api_keys table
+            record = {
+                "id": key_name,
+                "key_name": key_name,
+                "key_value": key_value,
+                "provider": MANAGED_API_KEYS.get(key_name, ''),
+                "updated_at": utc_now()
+            }
+            result = db.write("app_api_keys", [record])
+            if result and result.get('success'):
+                updated_keys.append(key_name)
+                # Also update os.environ for the current Lambda container
+                os.environ[key_name] = key_value
 
-        # Also update os.environ for the current invocation
-        for key, value in keys_to_update.items():
-            if value:
-                os.environ[key] = value
+        # Force reload keys into os.environ for this container
+        from lib.model_manager import get_model_manager
+        model_mgr = get_model_manager(db)
+        model_mgr.reload_api_keys()
 
         admin_id = event.get('requestContext', {}).get('authorizer', {}).get('userId', 'unknown')
-        logger.info(f"Admin {admin_id} updated API keys: {updated_keys}")
+        logger.info(f"Admin {admin_id} updated API keys in IbexDB: {updated_keys}")
 
         return respond(200, {
             "message": f"Updated {len(updated_keys)} API key(s)",

@@ -133,6 +133,11 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Get or create tenant-specific AI service
         tenant_ai_service = OptimizedAIService(tenant_db)
 
+        # Load API keys from IbexDB into os.environ (idempotent, cached by model manager)
+        from lib.model_manager import get_model_manager
+        model_mgr = get_model_manager(tenant_db)
+        model_mgr.load_api_keys_from_db()
+
         # Log request (excluding sensitive data)
         logger.info(f"Request received", extra={
             "tenant_id": tenant_id,

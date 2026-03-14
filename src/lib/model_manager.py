@@ -365,8 +365,37 @@ class ModelManager:
         """Get provider configuration"""
         return self.PROVIDER_CONFIGS.get(provider, {})
 
+    _api_keys_loaded: bool = False
+
+    def load_api_keys_from_db(self):
+        """Load API keys from IbexDB into os.environ (called once per cold start)"""
+        if self._api_keys_loaded or not self.db:
+            return
+
+        try:
+            result = self.db.query("app_api_keys", limit=100, use_cache=False, include_deleted=False)
+            if result and result.get('success'):
+                records = result.get('data', {}).get('records', [])
+                loaded = 0
+                for record in records:
+                    key_name = record.get('key_name')
+                    key_value = record.get('key_value')
+                    if key_name and key_value:
+                        os.environ[key_name] = key_value
+                        loaded += 1
+                if loaded:
+                    logger.info(f"Loaded {loaded} API key(s) from IbexDB")
+            ModelManager._api_keys_loaded = True
+        except Exception as e:
+            logger.warning(f"Could not load API keys from IbexDB: {e}")
+
+    def reload_api_keys(self):
+        """Force reload API keys from IbexDB (called after admin updates keys)"""
+        ModelManager._api_keys_loaded = False
+        self.load_api_keys_from_db()
+
     def get_api_key(self, provider: str) -> Optional[str]:
-        """Get API key for a provider"""
+        """Get API key for a provider (from os.environ, populated from IbexDB on cold start)"""
         provider_cfg = self.PROVIDER_CONFIGS.get(provider, {})
         api_key_env = provider_cfg.get('api_key_env')
 
