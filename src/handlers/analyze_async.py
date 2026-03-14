@@ -670,6 +670,17 @@ def _store_receipt_result(db, user_id: str, entry_id: str, data: Dict, image_url
                 except Exception as e:
                     logger.error(f"Failed to generate receipt item embeddings: {e}")
 
+        # Reconcile with active shopping lists
+        if item_records:
+            try:
+                from handlers.shopping import reconcile_receipt_with_shopping_lists
+                merchant = data.get('merchant_name', 'Unknown')
+                reconciliation = reconcile_receipt_with_shopping_lists(db, user_id, item_records, vendor=merchant)
+                if reconciliation.get("matched", 0) > 0:
+                    logger.info(f"Receipt reconciliation: matched {reconciliation['matched']} shopping list items")
+            except Exception as e:
+                logger.warning(f"Shopping list reconciliation skipped: {e}")
+
         logger.info(f"Stored receipt {entry_id} with {len(items)} items for user {user_id}")
         return True
 

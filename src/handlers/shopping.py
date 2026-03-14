@@ -1,23 +1,34 @@
 """
-Shopping List handlers - CRUD + AI-powered item parsing and list preparation
+Shopping List handlers - CRUD + AI-powered item parsing and smart purchase plan
+
+The "prepare" endpoint builds a store-grouped purchase plan from the user's
+actual receipt history, using vector similarity + SQL aggregation.
 """
 
 import json
 import uuid
 import os
 from datetime import datetime, timezone, timedelta
-from typing import Dict, Any
+from typing import Dict, List
 
 from utils.http import respond, get_user_id
-from utils.timestamps import utc_now, utc_date
+from utils.timestamps import utc_now
 from lib.auth_provider import require_auth
 from lib.logger import logger
 from lib.model_manager import get_model_manager
-from lib.embeddings import get_embeddings_batch, find_similar, find_similar_multi, zvec_load_from_ibexdb, ZVEC_AVAILABLE
 from openai import OpenAI
 
+# Try to import embeddings (may not be available in all environments)
+try:
+    from lib.embeddings import get_embeddings_batch, find_similar_multi, zvec_load_from_ibexdb, ZVEC_AVAILABLE
+    EMBEDDINGS_AVAILABLE = True
+except ImportError:
+    EMBEDDINGS_AVAILABLE = False
+    ZVEC_AVAILABLE = False
 
-# Structured output schema for parsing natural language items
+
+# ---------- Structured output schemas ----------
+
 PARSE_ITEMS_SCHEMA = {
     "type": "object",
     "properties": {
@@ -48,41 +59,81 @@ PARSE_ITEMS_SCHEMA = {
     "additionalProperties": False
 }
 
-# Structured output schema for the prepare/optimize endpoint
-PREPARE_LIST_SCHEMA = {
+# New: store-grouped purchase plan schema
+PURCHASE_PLAN_SCHEMA = {
     "type": "object",
     "properties": {
-        "optimized_items": {
+        "store_stops": {
             "type": "array",
+            "description": "Shopping stops ordered by priority (most items first)",
             "items": {
                 "type": "object",
                 "properties": {
-                    "name": {"type": "string"},
-                    "quantity": {"type": "number"},
-                    "unit": {"type": "string"},
-                    "category": {"type": "string"},
-                    "estimated_price": {"type": "number"},
-                    "store_recommendation": {"type": "string"},
-                    "price_note": {"type": "string"},
-                    "alternative": {"type": "string"},
-                    "nutrition_note": {"type": "string"}
+                    "store_name": {"type": "string"},
+                    "store_type": {
+                        "type": "string",
+                        "enum": ["grocery", "wholesale", "pharmacy", "specialty", "convenience", "online", "other"]
+                    },
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string"},
+                                "quantity": {"type": "number"},
+                                "unit": {"type": "string"},
+                                "category": {"type": "string"},
+                                "estimated_price": {"type": "number"},
+                                "price_source": {
+                                    "type": "string",
+                                    "description": "How price was determined: 'receipt_history', 'estimated', 'similar_item'"
+                                },
+                                "last_purchased": {
+                                    "type": "string",
+                                    "description": "When last bought at this store, e.g. '2 weeks ago', 'never'"
+                                },
+                                "alternative": {
+                                    "type": "string",
+                                    "description": "Cheaper or healthier alternative if any, empty string if none"
+                                },
+                                "notes": {
+                                    "type": "string",
+                                    "description": "Price trend, nutrition note, or tip"
+                                }
+                            },
+                            "required": ["name", "quantity", "unit", "category", "estimated_price",
+                                         "price_source", "last_purchased", "alternative", "notes"],
+                            "additionalProperties": False
+                        }
+                    },
+                    "store_subtotal": {"type": "number"},
+                    "item_count": {"type": "number"},
+                    "why_this_store": {
+                        "type": "string",
+                        "description": "Why shop here for these items (e.g. 'Best prices on produce based on your history')"
+                    }
                 },
-                "required": [
-                    "name", "quantity", "unit", "category",
-                    "estimated_price", "store_recommendation",
-                    "price_note", "alternative", "nutrition_note"
-                ],
+                "required": ["store_name", "store_type", "items", "store_subtotal", "item_count", "why_this_store"],
                 "additionalProperties": False
             }
         },
         "estimated_total": {"type": "number"},
+        "potential_savings": {"type": "number", "description": "How much saved vs buying everything at one store"},
         "budget_tips": {
             "type": "array",
             "items": {"type": "string"}
         },
-        "nutrition_summary": {"type": "string"}
+        "nutrition_notes": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Health-related tips based on the items and user's food history"
+        },
+        "summary": {
+            "type": "string",
+            "description": "One-paragraph shopping plan summary"
+        }
     },
-    "required": ["optimized_items", "estimated_total", "budget_tips", "nutrition_summary"],
+    "required": ["store_stops", "estimated_total", "potential_savings", "budget_tips", "nutrition_notes", "summary"],
     "additionalProperties": False
 }
 
@@ -100,6 +151,8 @@ def _get_ai_client():
         max_retries=2
     ), config
 
+
+# ---------- CRUD endpoints ----------
 
 @require_auth
 def create_list(event, context):
@@ -172,7 +225,6 @@ def get_list(event, context):
         return respond(400, {"error": "List ID required"})
 
     try:
-        # Fetch list
         list_result = db.query("app_shopping_lists", filters=[
             {"field": "id", "operator": "eq", "value": list_id},
             {"field": "user_id", "operator": "eq", "value": user_id}
@@ -187,7 +239,6 @@ def get_list(event, context):
 
         shopping_list = lists[0]
 
-        # Fetch items
         items_result = db.query("app_shopping_list_items", filters=[
             {"field": "list_id", "operator": "eq", "value": list_id}
         ], sort=[{"field": "category", "order": "asc"}], limit=200)
@@ -216,8 +267,6 @@ def update_list(event, context):
 
     try:
         body = json.loads(event.get('body', '{}'))
-
-        # Only allow updating specific fields
         updates = {}
         for field in ['name', 'status', 'notes']:
             if field in body:
@@ -256,12 +305,10 @@ def delete_list(event, context):
         return respond(400, {"error": "List ID required"})
 
     try:
-        # Delete items first
         db.delete("app_shopping_list_items", filters=[
             {"field": "list_id", "operator": "eq", "value": list_id}
         ])
 
-        # Delete the list
         result = db.delete("app_shopping_lists", filters=[
             {"field": "id", "operator": "eq", "value": list_id},
             {"field": "user_id", "operator": "eq", "value": user_id}
@@ -301,7 +348,6 @@ def add_items(event, context):
 
         parsed_items = []
 
-        # If natural language text, use AI to parse with structured outputs
         if text:
             client, config = _get_ai_client()
 
@@ -330,11 +376,8 @@ def add_items(event, context):
             result_data = json.loads(response.choices[0].message.content)
             parsed_items = result_data.get('items', [])
             logger.info(f"AI parsed {len(parsed_items)} items from text")
-
-            # Log API cost
             _log_shopping_cost(db, user_id, "parse_items", response.usage.total_tokens, config)
 
-        # Add manual items directly
         for item in manual_items:
             parsed_items.append({
                 "name": item.get('name', 'Unknown'),
@@ -344,7 +387,6 @@ def add_items(event, context):
                 "estimated_price": item.get('estimated_price', 0)
             })
 
-        # Write to database
         now = utc_now()
         item_records = []
         for item in parsed_items:
@@ -371,8 +413,6 @@ def add_items(event, context):
             write_result = db.write("app_shopping_list_items", item_records)
             if not write_result.get('success'):
                 return respond(500, {"error": f"Failed to add items: {write_result.get('error')}"})
-
-            # Update list item_count and estimated_total
             _update_list_totals(db, user_id, list_id)
 
         return respond(201, {
@@ -398,7 +438,6 @@ def update_item(event, context):
 
     try:
         body = json.loads(event.get('body', '{}'))
-
         updates = {}
         for field in ['name', 'quantity', 'unit', 'category', 'estimated_price',
                        'actual_price', 'store_recommendation', 'is_purchased',
@@ -419,7 +458,6 @@ def update_item(event, context):
                           updates=updates)
 
         if result.get('success'):
-            # Update list totals
             _update_list_totals(db, user_id, list_id)
             return respond(200, {"message": "Item updated", "id": item_id})
         else:
@@ -458,13 +496,188 @@ def delete_item(event, context):
         return respond(500, {"error": str(e)})
 
 
+# ---------- Smart purchase plan ----------
+
+def _build_store_price_index(db, user_id: str, days: int = 180) -> Dict:
+    """
+    Build a comprehensive price index from receipt history.
+    Returns: {
+        "stores": {"Trader Joe's": {"city": "...", "state": "...", "visit_count": 5, "last_visit": "..."}},
+        "item_prices": {"milk": [{"store": "Trader Joe's", "price": 3.49, "date": "...", "qty": 1}]},
+        "user_location": {"city": "...", "state": "...", "postal_code": "..."}
+    }
+    """
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).strftime('%Y-%m-%dT%H:%M:%S')
+
+    stores = {}       # store_name -> {city, state, visit_count, last_visit, total_spent}
+    item_prices = {}   # item_name_lower -> [{store, price, date, qty, category}]
+    user_location = {}
+
+    # 1. Fetch receipts (store-level info)
+    try:
+        receipts_result = db.query("app_receipts", filters=[
+            {"field": "user_id", "operator": "eq", "value": user_id},
+            {"field": "created_at", "operator": "gte", "value": cutoff}
+        ], sort=[{"field": "created_at", "order": "desc"}], limit=200)
+
+        if receipts_result.get('success'):
+            for r in receipts_result.get('data', {}).get('records', []):
+                vendor = r.get('vendor', '') or ''
+                if not vendor or vendor == 'Unknown Vendor':
+                    continue
+
+                # Track store info
+                if vendor not in stores:
+                    stores[vendor] = {
+                        "city": r.get('city', ''),
+                        "state": r.get('state', ''),
+                        "postal_code": r.get('postal_code', ''),
+                        "visit_count": 0,
+                        "last_visit": '',
+                        "total_spent": 0.0
+                    }
+                stores[vendor]["visit_count"] += 1
+                stores[vendor]["total_spent"] += float(r.get('total_amount', 0) or 0)
+                visit_date = r.get('receipt_date') or r.get('created_at', '')
+                if visit_date > stores[vendor]["last_visit"]:
+                    stores[vendor]["last_visit"] = visit_date
+
+                # Infer user location from most recent receipt with location data
+                if not user_location and (r.get('city') or r.get('state') or r.get('postal_code')):
+                    user_location = {
+                        "city": r.get('city', ''),
+                        "state": r.get('state', ''),
+                        "postal_code": r.get('postal_code', '')
+                    }
+    except Exception as e:
+        logger.warning(f"Failed to fetch receipts for price index: {e}")
+
+    # 2. Fetch receipt items with store mapping
+    try:
+        # Use execute_sql to join receipt_items with receipts for store info
+        sql = (
+            "SELECT ri.name, ri.unit_price, ri.total_price, ri.quantity, ri.category, "
+            "r.vendor, r.receipt_date, r.created_at "
+            "FROM app_receipt_items ri "
+            "JOIN app_receipts r ON ri.receipt_id = r.id "
+            "WHERE r.user_id = ? AND r.created_at >= ? AND r._deleted = false AND ri._deleted = false "
+            "ORDER BY r.created_at DESC LIMIT 1000"
+        )
+        sql_result = db.execute_sql(sql, params=[user_id, cutoff])
+
+        if sql_result.get('success'):
+            for row in sql_result.get('data', {}).get('records', []):
+                name = (row.get('name', '') or '').strip()
+                if not name:
+                    continue
+                store = row.get('vendor', '') or 'Unknown'
+                price = float(row.get('unit_price', 0) or row.get('total_price', 0) or 0)
+                date = row.get('receipt_date') or row.get('created_at', '')
+                qty = float(row.get('quantity', 1) or 1)
+                cat = row.get('category', '')
+
+                key = name.lower()
+                if key not in item_prices:
+                    item_prices[key] = []
+                item_prices[key].append({
+                    "store": store,
+                    "price": round(price, 2),
+                    "date": date,
+                    "qty": qty,
+                    "category": cat,
+                    "name_original": name
+                })
+    except Exception as e:
+        logger.warning(f"execute_sql join failed, falling back to basic query: {e}")
+        # Fallback: query receipt_items without store info
+        try:
+            items_result = db.query("app_receipt_items", filters=[
+                {"field": "created_at", "operator": "gte", "value": cutoff}
+            ], sort=[{"field": "created_at", "order": "desc"}], limit=500)
+
+            if items_result.get('success'):
+                for row in items_result.get('data', {}).get('records', []):
+                    name = (row.get('name', '') or '').strip()
+                    if not name:
+                        continue
+                    price = float(row.get('unit_price', 0) or row.get('total_price', 0) or 0)
+                    key = name.lower()
+                    if key not in item_prices:
+                        item_prices[key] = []
+                    item_prices[key].append({
+                        "store": "Unknown",
+                        "price": round(price, 2),
+                        "date": row.get('created_at', ''),
+                        "qty": float(row.get('quantity', 1) or 1),
+                        "category": row.get('category', ''),
+                        "name_original": name
+                    })
+        except Exception as e2:
+            logger.warning(f"Basic receipt items query also failed: {e2}")
+
+    logger.info(f"Price index built: {len(stores)} stores, {len(item_prices)} unique items, "
+                f"location: {user_location}")
+
+    return {
+        "stores": stores,
+        "item_prices": item_prices,
+        "user_location": user_location
+    }
+
+
+def _find_vector_matches(db, items: List[Dict], days: int = 90) -> Dict:
+    """Use vector similarity to match shopping items against receipt item embeddings."""
+    if not EMBEDDINGS_AVAILABLE:
+        return {}
+
+    try:
+        zvec_load_from_ibexdb(db, days=days)
+        item_names = [i.get("name", "") for i in items]
+        item_embeddings = get_embeddings_batch(item_names)
+
+        if ZVEC_AVAILABLE:
+            return find_similar_multi(item_embeddings, item_names, candidates=[], top_k=5, threshold=0.65)
+        else:
+            # Fallback Python cosine search
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).strftime('%Y-%m-%dT%H:%M:%S')
+            emb_result = db.query("app_receipt_item_embeddings", filters=[
+                {"field": "created_at", "operator": "gte", "value": cutoff}
+            ], sort=[{"field": "created_at", "order": "desc"}], limit=500)
+
+            candidates = []
+            if emb_result.get('success'):
+                for rc in emb_result.get('data', {}).get('records', []):
+                    try:
+                        emb = json.loads(rc.get("embedding", "[]"))
+                        if emb:
+                            candidates.append({
+                                "embedding": emb,
+                                "item_name": rc.get("item_name", ""),
+                                "category": rc.get("category", ""),
+                                "unit_price": rc.get("unit_price", 0),
+                                "store_name": rc.get("store_name", ""),
+                            })
+                    except (json.JSONDecodeError, TypeError):
+                        continue
+
+            return find_similar_multi(item_embeddings, item_names, candidates, top_k=5, threshold=0.65)
+
+    except Exception as e:
+        logger.warning(f"Vector search failed: {e}")
+        return {}
+
+
 @require_auth
 def prepare_list(event, context):
     """
-    POST /v1/shopping-lists/{id}/prepare - AI-powered list optimization
-    Queries receipt history + food nutrition history, returns optimized list
-    with store recommendations, price estimates, and alternatives.
-    Uses structured outputs for reliable JSON responses.
+    POST /v1/shopping-lists/{id}/prepare - Smart Purchase Plan
+
+    Builds a store-grouped purchase plan from the user's actual receipt history:
+    1. Builds price index from receipt history (which stores, what prices, when)
+    2. Uses vector similarity to match shopping items to past purchases
+    3. AI generates optimized store-by-store purchase plan
+
+    Body (optional): {"location": {"lat": 33.7, "lng": -84.4}} for future location features
     """
     db = context['db']
     user_id = get_user_id(event) or 'local-dev-user'
@@ -474,6 +687,12 @@ def prepare_list(event, context):
         return respond(400, {"error": "List ID required"})
 
     try:
+        # Parse optional body
+        try:
+            body = json.loads(event.get('body', '{}') or '{}')
+        except json.JSONDecodeError:
+            body = {}
+
         # 1. Fetch current shopping list items
         items_result = db.query("app_shopping_list_items", filters=[
             {"field": "list_id", "operator": "eq", "value": list_id}
@@ -486,168 +705,147 @@ def prepare_list(event, context):
         if not items:
             return respond(400, {"error": "List has no items to optimize"})
 
-        # 2. Vector similarity search against receipt item embeddings (last 90 days)
-        ninety_days_ago = (datetime.now(timezone.utc) - timedelta(days=90)).strftime('%Y-%m-%dT%H:%M:%S')
+        # 2. Build store-level price index from receipt history
+        price_index = _build_store_price_index(db, user_id, days=180)
 
-        receipt_history = []
-        vector_matches = {}  # keyed by shopping item name
-        candidates = []
-        try:
-            # Ensure zvec is loaded from IbexDB (no-op if already warm)
-            zvec_load_from_ibexdb(db, days=90)
+        # 3. Vector similarity matching
+        vector_matches = _find_vector_matches(db, items, days=90)
 
-            # Embed each shopping item name
-            item_names = [i.get("name", "") for i in items]
-            item_embeddings = get_embeddings_batch(item_names)
-
-            if ZVEC_AVAILABLE:
-                # zvec HNSW search — fast, no need to load candidates into memory
-                vector_matches = find_similar_multi(
-                    item_embeddings, item_names, candidates=[], top_k=5, threshold=0.7
-                )
-                for matches in vector_matches.values():
-                    receipt_history.extend(matches)
-                logger.info(f"zvec search: {len(vector_matches)} items matched")
-            else:
-                # Fallback: load candidates from IbexDB and use Python cosine
-                emb_result = db.query("app_receipt_item_embeddings", filters=[
-                    {"field": "created_at", "operator": "gte", "value": ninety_days_ago}
-                ], sort=[{"field": "created_at", "order": "desc"}], limit=500)
-
-                if emb_result.get('success'):
-                    raw_candidates = emb_result.get('data', {}).get('records', [])
-                    for rc in raw_candidates:
-                        try:
-                            emb = json.loads(rc.get("embedding", "[]"))
-                            if emb:
-                                candidates.append({
-                                    "embedding": emb,
-                                    "item_name": rc.get("item_name", ""),
-                                    "category": rc.get("category", ""),
-                                    "unit_price": rc.get("unit_price", 0),
-                                    "store_name": rc.get("store_name", ""),
-                                })
-                        except (json.JSONDecodeError, TypeError):
-                            continue
-
-                    vector_matches = find_similar_multi(
-                        item_embeddings, item_names, candidates, top_k=5, threshold=0.7
-                    )
-                    for matches in vector_matches.values():
-                        receipt_history.extend(matches)
-
-                logger.info(f"Python vector search: {len(vector_matches)} items matched from {len(candidates)} candidates")
-
-        except Exception as e:
-            logger.warning(f"Vector search failed, falling back to basic query: {e}")
-
-        # Fallback: if vector search found nothing, use EXECUTE_SQL for aggregated receipt data
-        if not receipt_history:
-            try:
-                sql_result = db.execute_sql(
-                    "SELECT name, category, "
-                    "AVG(unit_price) as avg_price, COUNT(*) as purchase_count, "
-                    "MAX(created_at) as last_purchased "
-                    "FROM app_receipt_items "
-                    "WHERE created_at >= ? AND _deleted = false "
-                    "GROUP BY name, category "
-                    "ORDER BY purchase_count DESC LIMIT 200",
-                    params=[ninety_days_ago]
-                )
-                if sql_result.get('success'):
-                    receipt_history = sql_result.get('data', {}).get('records', [])
-            except Exception as e:
-                logger.warning(f"EXECUTE_SQL failed for receipt history, falling back to basic query: {e}")
-                try:
-                    receipt_result = db.query("app_receipt_items", filters=[
-                        {"field": "created_at", "operator": "gte", "value": ninety_days_ago}
-                    ], sort=[{"field": "created_at", "order": "desc"}], limit=200)
-
-                    if receipt_result.get('success'):
-                        receipt_history = receipt_result.get('data', {}).get('records', [])
-                except Exception as e2:
-                    logger.warning(f"Could not fetch receipt history: {e2}")
-
-        # 3. Query food nutrition history for patterns
+        # 4. Fetch food nutrition history
         food_history = []
         try:
-            food_result = db.query("app_food_items", filters=[
-                {"field": "created_at", "operator": "gte", "value": ninety_days_ago}
-            ], sort=[{"field": "created_at", "order": "desc"}], limit=100)
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=90)).strftime('%Y-%m-%dT%H:%M:%S')
+            food_result = db.query("app_food_entries_v2", filters=[
+                {"field": "user_id", "operator": "eq", "value": user_id},
+                {"field": "created_at", "operator": "gte", "value": cutoff}
+            ], sort=[{"field": "created_at", "order": "desc"}], limit=50)
 
             if food_result.get('success'):
                 food_history = food_result.get('data', {}).get('records', [])
         except Exception as e:
             logger.warning(f"Could not fetch food history: {e}")
 
-        # 4. Build context for AI
+        # 5. Build rich context for AI
         items_text = json.dumps([{
             "name": i.get("name"), "quantity": i.get("quantity"),
             "unit": i.get("unit"), "category": i.get("category"),
-            "estimated_price": i.get("estimated_price", 0)
+            "current_estimate": i.get("estimated_price", 0)
         } for i in items], indent=2)
 
-        receipt_text = ""
-        if vector_matches:
-            # Use vector search results grouped by shopping item
-            price_summary = []
-            for shopping_item, matches in vector_matches.items():
-                for match in matches:
-                    receipt_item = match.get("item_name", "")
-                    price = match.get("unit_price", 0)
-                    store = match.get("store_name", "unknown")
-                    score = match.get("similarity", 0)
-                    price_summary.append(
-                        f"- {shopping_item} matched '{receipt_item}': avg ${price:.2f} at {store} (similarity: {score:.2f})"
-                    )
-            receipt_text = "\n".join(price_summary) if price_summary else "No recent purchase history."
-        elif receipt_history:
-            # Fallback: summarize basic receipt history
-            recent_items = {}
-            for ri in receipt_history[:100]:
-                name = ri.get('name', '')
-                if name:
-                    if name not in recent_items:
-                        recent_items[name] = {
-                            "prices": [],
-                            "count": 0
-                        }
-                    price = ri.get('unit_price') or ri.get('total_price', 0)
-                    if price:
-                        recent_items[name]["prices"].append(price)
-                    recent_items[name]["count"] += 1
+        # Store profile
+        store_profiles = []
+        for store, info in price_index["stores"].items():
+            last = info.get("last_visit", "")
+            days_ago = ""
+            if last:
+                try:
+                    last_dt = datetime.fromisoformat(last.replace('Z', '+00:00'))
+                    delta = (datetime.now(timezone.utc) - last_dt).days
+                    days_ago = f"{delta} days ago"
+                except Exception:
+                    days_ago = last
+            store_profiles.append(
+                f"- {store}: {info['visit_count']} visits, ${info['total_spent']:.0f} total spent, "
+                f"last visit: {days_ago}"
+                + (f", location: {info.get('city', '')}, {info.get('state', '')}" if info.get('city') else "")
+            )
+        stores_text = "\n".join(store_profiles) if store_profiles else "No store history available."
 
-            price_summary = []
-            for name, info in list(recent_items.items())[:30]:
-                avg_price = sum(info["prices"]) / len(info["prices"]) if info["prices"] else 0
-                price_summary.append(f"- {name}: avg ${avg_price:.2f} (bought {info['count']}x)")
+        # Item-level price history
+        price_lines = []
+        for item in items:
+            name = item.get("name", "")
+            name_lower = name.lower()
 
-            receipt_text = "\n".join(price_summary) if price_summary else "No recent purchase history."
+            # Check exact/fuzzy match in price index
+            matches_found = []
+            for key, prices in price_index["item_prices"].items():
+                if name_lower in key or key in name_lower:
+                    for p in prices[:3]:  # top 3 price records
+                        matches_found.append(p)
 
+            # Also check vector matches
+            if name in vector_matches:
+                for vm in vector_matches[name]:
+                    matches_found.append({
+                        "store": vm.get("store_name", "unknown"),
+                        "price": vm.get("unit_price", 0),
+                        "date": "",
+                        "name_original": vm.get("item_name", ""),
+                    })
+
+            if matches_found:
+                # Group by store, show best price per store
+                store_prices = {}
+                for m in matches_found:
+                    store = m.get("store", "Unknown")
+                    price = m.get("price", 0)
+                    if store not in store_prices or price < store_prices[store]["price"]:
+                        store_prices[store] = {"price": price, "date": m.get("date", ""), "matched": m.get("name_original", "")}
+
+                price_parts = []
+                for store, info in store_prices.items():
+                    part = f"${info['price']:.2f} at {store}"
+                    if info.get("date"):
+                        part += f" ({info['date'][:10]})"
+                    if info.get("matched") and info["matched"].lower() != name_lower:
+                        part += f" [matched: {info['matched']}]"
+                    price_parts.append(part)
+                price_lines.append(f"- {name}: {', '.join(price_parts)}")
+            else:
+                price_lines.append(f"- {name}: no purchase history found")
+
+        price_history_text = "\n".join(price_lines)
+
+        # Nutrition context
         nutrition_text = ""
         if food_history:
-            food_names = list(set(f.get('name', '') for f in food_history[:50] if f.get('name')))
-            nutrition_text = f"Recently consumed foods: {', '.join(food_names[:20])}"
+            food_names = list(set(f.get('food_name', '') or f.get('name', '') for f in food_history[:30] if f.get('food_name') or f.get('name')))
+            nutrition_text = f"User's recently consumed foods: {', '.join(food_names[:20])}"
 
-        # 5. Call AI with structured outputs
+        # Location context
+        loc = price_index.get("user_location", {})
+        location_text = ""
+        if loc.get("city") or loc.get("state"):
+            location_text = f"User's area: {loc.get('city', '')}, {loc.get('state', '')} {loc.get('postal_code', '')}"
+
+        # 6. Call AI with structured outputs
         client, config = _get_ai_client()
 
         system_prompt = (
-            "You are a smart shopping assistant. Given a shopping list, recent purchase "
-            "history (with prices), and nutrition patterns, optimize the list with: "
-            "price estimates based on history, store recommendations, healthier alternatives "
-            "where appropriate, and budget tips. Be practical and specific."
+            "You are a smart shopping assistant that creates store-grouped purchase plans "
+            "optimized for BOTH cost AND health quality.\n\n"
+            "Given a shopping list, the user's actual store visit history, item price history "
+            "from their receipts, and their recent food/nutrition history, create an optimized plan:\n\n"
+            "COST OPTIMIZATION:\n"
+            "1. Group items by the BEST STORE based on the user's actual purchase history and prices\n"
+            "2. Use REAL PRICES from receipt history (adjusted slightly for inflation if old)\n"
+            "3. Order store stops by most items first (minimize trips)\n"
+            "4. For items with no history, estimate prices and suggest a likely store\n\n"
+            "HEALTH & QUALITY:\n"
+            "5. Flag unhealthy items in the 'notes' field (e.g. high sodium, processed, high sugar)\n"
+            "6. For unhealthy items, ALWAYS suggest a healthier alternative in the 'alternative' field "
+            "(e.g. 'white bread' → 'whole wheat bread', 'soda' → 'sparkling water')\n"
+            "7. In 'nutrition_notes', give practical health tips based on the overall list balance "
+            "(e.g. 'Your list is heavy on carbs — consider adding leafy greens')\n"
+            "8. Consider the user's recent food history — if they're eating too much of something, note it\n\n"
+            "Be practical and specific. Use the actual store names from the user's history. "
+            "If the user mainly shops at 2-3 stores, keep the plan to those stores."
         )
 
-        user_prompt = f"""Shopping list items:
+        user_prompt = f"""SHOPPING LIST:
 {items_text}
 
-Recent purchase history (last 90 days):
-{receipt_text or "No history available."}
+USER'S STORES (from receipt history, last 6 months):
+{stores_text}
 
-{nutrition_text or "No nutrition data available."}
+PRICE HISTORY (from user's receipts):
+{price_history_text}
 
-Optimize this shopping list with price estimates, store recommendations, and suggestions."""
+{nutrition_text}
+{location_text}
+
+Create a store-grouped purchase plan. Group items by the best store based on this user's actual shopping patterns and prices."""
 
         response = client.chat.completions.create(
             model=config.model_name,
@@ -655,14 +853,14 @@ Optimize this shopping list with price estimates, store recommendations, and sug
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            temperature=config.temperature,
-            max_tokens=config.max_tokens,
+            temperature=0.3,
+            max_tokens=4096,
             response_format={
                 "type": "json_schema",
                 "json_schema": {
-                    "name": "shopping_preparation",
+                    "name": "purchase_plan",
                     "strict": True,
-                    "schema": PREPARE_LIST_SCHEMA
+                    "schema": PURCHASE_PLAN_SCHEMA
                 }
             }
         )
@@ -670,35 +868,36 @@ Optimize this shopping list with price estimates, store recommendations, and sug
         prepare_result = json.loads(response.choices[0].message.content)
         tokens_used = response.usage.total_tokens
 
-        # Log cost
         _log_shopping_cost(db, user_id, "prepare_list", tokens_used, config)
 
-        logger.info(f"Prepared shopping list {list_id}: {len(prepare_result.get('optimized_items', []))} items, "
-                     f"{tokens_used} tokens")
+        logger.info(f"Purchase plan for list {list_id}: {len(prepare_result.get('store_stops', []))} stores, "
+                     f"${prepare_result.get('estimated_total', 0):.2f} total, {tokens_used} tokens")
 
-        # Update the list's estimated_total
+        # Update list estimated_total
         estimated_total = prepare_result.get('estimated_total', 0)
         db.update("app_shopping_lists",
                   filters=[{"field": "id", "operator": "eq", "value": list_id}],
-                  updates={
-                      "estimated_total": estimated_total,
-                      "updated_at": utc_now()
-                  })
+                  updates={"estimated_total": estimated_total, "updated_at": utc_now()})
 
         return respond(200, {
             "list_id": list_id,
             "preparation": prepare_result,
             "metadata": {
                 "tokens_used": tokens_used,
-                "receipt_history_items": len(receipt_history),
-                "food_history_items": len(food_history)
+                "stores_in_history": len(price_index["stores"]),
+                "items_in_price_index": len(price_index["item_prices"]),
+                "vector_matches": len(vector_matches),
+                "food_history_items": len(food_history),
+                "user_location": price_index.get("user_location", {})
             }
         })
 
     except Exception as e:
-        logger.error(f"Error preparing shopping list: {e}")
+        logger.error(f"Error preparing shopping list: {e}", exc_info=True)
         return respond(500, {"error": str(e)})
 
+
+# ---------- Helpers ----------
 
 def _update_list_totals(db, user_id: str, list_id: str):
     """Update item_count and estimated_total on the parent list"""
@@ -743,3 +942,110 @@ def _log_shopping_cost(db, user_id: str, function_name: str, tokens: int, config
         }])
     except Exception as e:
         logger.error(f"Failed to log shopping cost: {e}")
+
+
+# ---------- Receipt Reconciliation ----------
+
+def reconcile_receipt_with_shopping_lists(db, user_id: str, receipt_items: List[Dict], vendor: str = ""):
+    """
+    Auto-reconcile receipt items against active shopping lists.
+    Called after a receipt is processed to mark matching shopping list items as purchased.
+
+    Uses fuzzy name matching: if a receipt item name contains (or is contained by)
+    a shopping list item name, it's a match.
+
+    Returns: {"matched": int, "lists_updated": [list_id, ...]}
+    """
+    try:
+        # 1. Fetch active shopping lists for this user
+        lists_result = db.query("app_shopping_lists", filters=[
+            {"field": "user_id", "operator": "eq", "value": user_id},
+            {"field": "status", "operator": "eq", "value": "active"}
+        ], limit=20)
+
+        if not lists_result.get('success'):
+            return {"matched": 0, "lists_updated": []}
+
+        active_lists = lists_result.get('data', {}).get('records', [])
+        if not active_lists:
+            return {"matched": 0, "lists_updated": []}
+
+        # 2. Fetch all items from active lists that are NOT yet purchased
+        list_ids = [l['id'] for l in active_lists]
+        all_shopping_items = []
+        for list_id in list_ids:
+            items_result = db.query("app_shopping_list_items", filters=[
+                {"field": "list_id", "operator": "eq", "value": list_id},
+            ], limit=200)
+            if items_result.get('success'):
+                for item in items_result.get('data', {}).get('records', []):
+                    # Normalize is_purchased (IbexDB may return string)
+                    purchased = item.get('is_purchased', False)
+                    if isinstance(purchased, str):
+                        purchased = purchased.lower() == 'true'
+                    if not purchased:
+                        all_shopping_items.append(item)
+
+        if not all_shopping_items:
+            return {"matched": 0, "lists_updated": []}
+
+        # 3. Build receipt item name lookup (lowercased, cleaned)
+        receipt_names = []
+        for ri in receipt_items:
+            name = (ri.get('name', '') or '').strip().lower()
+            if name and name != 'unknown item':
+                receipt_names.append(name)
+
+        if not receipt_names:
+            return {"matched": 0, "lists_updated": []}
+
+        # 4. Match shopping items against receipt items (fuzzy containment)
+        matched_count = 0
+        updated_lists = set()
+        now = utc_now()
+
+        for si in all_shopping_items:
+            si_name = (si.get('name', '') or '').strip().lower()
+            if not si_name:
+                continue
+
+            # Check if any receipt item matches this shopping item
+            is_match = False
+            for rn in receipt_names:
+                # Fuzzy containment: "milk" matches "whole milk 2%", "chicken breast" matches "chicken breast boneless"
+                if si_name in rn or rn in si_name:
+                    is_match = True
+                    break
+                # Also check word-level overlap for multi-word items
+                si_words = set(si_name.split())
+                rn_words = set(rn.split())
+                if len(si_words) > 1 and len(si_words & rn_words) >= len(si_words) * 0.6:
+                    is_match = True
+                    break
+
+            if is_match:
+                # Mark as purchased
+                db.update("app_shopping_list_items",
+                          filters=[{"field": "id", "operator": "eq", "value": si['id']}],
+                          updates={
+                              "is_purchased": True,
+                              "actual_price": si.get('estimated_price', 0),
+                              "store_recommendation": vendor,
+                              "updated_at": now
+                          })
+                matched_count += 1
+                updated_lists.add(si['list_id'])
+
+        # 5. Update totals for affected lists
+        for list_id in updated_lists:
+            _update_list_totals(db, user_id, list_id)
+
+        if matched_count > 0:
+            logger.info(f"Receipt reconciliation: matched {matched_count} items across "
+                       f"{len(updated_lists)} shopping lists for user {user_id}")
+
+        return {"matched": matched_count, "lists_updated": list(updated_lists)}
+
+    except Exception as e:
+        logger.error(f"Receipt reconciliation failed: {e}")
+        return {"matched": 0, "lists_updated": []}

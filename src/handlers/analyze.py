@@ -493,8 +493,8 @@ def _store_receipt(
 
         # Store receipt items if available
         items = ai_data.get('items', [])
+        item_records = []
         if items:
-            item_records = []
             for item in items:
                 unit_price = float(item.get('unit_price') or item.get('price') or 0.0)
                 quantity = float(item.get('quantity') or 1.0)
@@ -546,13 +546,23 @@ def _store_receipt(
             except Exception as e:
                 logger.warning(f"Failed to generate receipt item embeddings: {e}")
 
+        # Reconcile with active shopping lists
+        reconciliation = {"matched": 0}
+        if item_records:
+            try:
+                from handlers.shopping import reconcile_receipt_with_shopping_lists
+                reconciliation = reconcile_receipt_with_shopping_lists(db, user_id, item_records, vendor=merchant)
+            except Exception as e:
+                logger.warning(f"Shopping list reconciliation skipped: {e}")
+
         logger.info(
             "Receipt stored",
             entry_id=entry_id,
             user_id=user_id,
             merchant=merchant,
             total=total,
-            item_count=len(items)
+            item_count=len(items),
+            shopping_matched=reconciliation.get("matched", 0)
         )
 
         return {
@@ -564,7 +574,8 @@ def _store_receipt(
                 'merchant': merchant,
                 'total': total,
                 'items': len(items)
-            }
+            },
+            'shopping_reconciliation': reconciliation
         }
 
     except Exception as e:
