@@ -176,7 +176,7 @@ def get_list(event, context):
         list_result = db.query("app_shopping_lists", filters=[
             {"field": "id", "operator": "eq", "value": list_id},
             {"field": "user_id", "operator": "eq", "value": user_id}
-        ], limit=1)
+        ], limit=1, use_cache=False)
 
         if not list_result.get('success'):
             return respond(500, {"error": "Failed to fetch list"})
