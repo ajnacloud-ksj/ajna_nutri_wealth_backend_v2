@@ -152,6 +152,7 @@ def _get_ai_client():
     ), config
 
 
+
 # ---------- CRUD endpoints ----------
 
 @require_auth
@@ -362,7 +363,7 @@ def add_items(event, context):
                     {"role": "user", "content": f"Parse these shopping items: {text}"}
                 ],
                 temperature=0.1,
-                max_tokens=config.max_tokens,
+                **config.token_kwargs(),
                 response_format={
                     "type": "json_schema",
                     "json_schema": {
@@ -858,7 +859,7 @@ Create a store-grouped purchase plan. Group items by the best store based on thi
                 {"role": "user", "content": user_prompt}
             ],
             temperature=0.3,
-            max_tokens=4096,
+            **config.token_kwargs(4096),
             response_format={
                 "type": "json_schema",
                 "json_schema": {

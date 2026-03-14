@@ -137,7 +137,7 @@ Return ONLY a JSON object with:
                 model=config.model_name,
                 messages=messages,
                 temperature=config.temperature,
-                max_tokens=config.max_tokens,
+                **config.token_kwargs(),
                 response_format={"type": "json_object"}
             )
 
@@ -406,7 +406,7 @@ Return ONLY a JSON object with:
                 model=config.model_name,
                 messages=messages,
                 temperature=config.temperature,
-                max_tokens=config.max_tokens,
+                **config.token_kwargs(),
                 response_format=response_format
             )
 
@@ -433,7 +433,7 @@ Return ONLY a JSON object with:
                         model=config.model_name,
                         messages=retry_messages,
                         temperature=0,  # Use zero temperature for retry
-                        max_tokens=config.max_tokens,
+                        **config.token_kwargs(),
                         response_format=response_format
                     )
 

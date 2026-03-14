@@ -34,6 +34,16 @@ class ModelConfig:
     fallback_model: Optional[str] = None
     api_key_env: Optional[str] = None
 
+    def token_kwargs(self, override: int = 0) -> dict:
+        """Return the correct token limit kwarg for this model.
+        Newer models (gpt-5*, o1*, o3*, o4*) use max_completion_tokens."""
+        tokens = override or self.max_tokens
+        if tokens <= 0:
+            return {}
+        if any(self.model_name.startswith(p) for p in ("gpt-5", "o1", "o3", "o4")):
+            return {"max_completion_tokens": tokens}
+        return {"max_tokens": tokens}
+
 
 class ModelManager:
     """
