@@ -202,7 +202,7 @@ def list_lists(event, context):
     try:
         result = db.query("app_shopping_lists", filters=[
             {"field": "user_id", "operator": "eq", "value": user_id}
-        ], sort=[{"field": "updated_at", "order": "desc"}], limit=50)
+        ], sort=[{"field": "updated_at", "order": "desc"}], limit=50, use_cache=False, include_deleted=False)
 
         if result.get('success'):
             lists = result.get('data', {}).get('records', [])
@@ -231,7 +231,7 @@ def get_list(event, context):
         list_result = db.query("app_shopping_lists", filters=[
             {"field": "id", "operator": "eq", "value": list_id},
             {"field": "user_id", "operator": "eq", "value": user_id}
-        ], limit=1, use_cache=False)
+        ], limit=1, use_cache=False, include_deleted=False)
 
         if not list_result.get('success'):
             return respond(500, {"error": "Failed to fetch list"})
@@ -244,7 +244,7 @@ def get_list(event, context):
 
         items_result = db.query("app_shopping_list_items", filters=[
             {"field": "list_id", "operator": "eq", "value": list_id}
-        ], sort=[{"field": "category", "order": "asc"}], limit=200)
+        ], sort=[{"field": "category", "order": "asc"}], limit=200, include_deleted=False)
 
         items = []
         if items_result.get('success'):
@@ -703,7 +703,7 @@ def prepare_list(event, context):
         # 1. Fetch current shopping list items
         items_result = db.query("app_shopping_list_items", filters=[
             {"field": "list_id", "operator": "eq", "value": list_id}
-        ], limit=200)
+        ], limit=200, include_deleted=False)
 
         if not items_result.get('success'):
             return respond(500, {"error": "Failed to fetch list items"})
@@ -923,7 +923,7 @@ def optimize_all(event, context):
         lists_result = db.query("app_shopping_lists", filters=[
             {"field": "user_id", "operator": "eq", "value": user_id},
             {"field": "status", "operator": "eq", "value": "active"}
-        ], limit=50)
+        ], limit=50, include_deleted=False)
 
         if not lists_result.get('success'):
             return respond(500, {"error": "Failed to fetch shopping lists"})
@@ -953,7 +953,7 @@ def optimize_all(event, context):
             list_id = lst['id']
             items_result = db.query("app_shopping_list_items", filters=[
                 {"field": "list_id", "operator": "eq", "value": list_id}
-            ], limit=200)
+            ], limit=200, include_deleted=False)
 
             if items_result.get('success'):
                 for item in items_result.get('data', {}).get('records', []):
@@ -1224,7 +1224,7 @@ def _update_list_totals(db, user_id: str, list_id: str):
     try:
         items_result = db.query("app_shopping_list_items", filters=[
             {"field": "list_id", "operator": "eq", "value": list_id}
-        ], limit=500)
+        ], limit=500, include_deleted=False)
 
         if items_result.get('success'):
             items = items_result.get('data', {}).get('records', [])
@@ -1281,7 +1281,7 @@ def reconcile_receipt_with_shopping_lists(db, user_id: str, receipt_items: List[
         lists_result = db.query("app_shopping_lists", filters=[
             {"field": "user_id", "operator": "eq", "value": user_id},
             {"field": "status", "operator": "eq", "value": "active"}
-        ], limit=20)
+        ], limit=20, include_deleted=False)
 
         if not lists_result.get('success'):
             return {"matched": 0, "lists_updated": []}
@@ -1296,7 +1296,7 @@ def reconcile_receipt_with_shopping_lists(db, user_id: str, receipt_items: List[
         for list_id in list_ids:
             items_result = db.query("app_shopping_list_items", filters=[
                 {"field": "list_id", "operator": "eq", "value": list_id},
-            ], limit=200)
+            ], limit=200, include_deleted=False)
             if items_result.get('success'):
                 for item in items_result.get('data', {}).get('records', []):
                     # Normalize is_purchased (IbexDB may return string)
