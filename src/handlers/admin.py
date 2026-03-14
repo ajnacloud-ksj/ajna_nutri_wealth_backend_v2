@@ -312,3 +312,102 @@ def update_model_config_admin(event: Dict[str, Any], context: Dict[str, Any]) ->
     except Exception as e:
         logger.error(f"Error updating model config: {e}")
         return respond(500, {"error": str(e)}, event=event)
+
+
+# Allowed API key env vars that can be managed from admin UI
+MANAGED_API_KEYS = {
+    'OPENAI_API_KEY': 'OpenAI',
+    'GROQ_API_KEY': 'Groq',
+    'SARVAM_API_KEY': 'Sarvam',
+    'ANTHROPIC_API_KEY': 'Anthropic',
+    'TOGETHER_API_KEY': 'Together AI',
+}
+
+@log_handler
+@require_admin_role
+def get_api_keys(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    GET /v1/admin/api-keys - List configured API keys (masked) (admin only)
+    """
+    try:
+        keys = []
+        for env_var, provider_name in MANAGED_API_KEYS.items():
+            value = os.environ.get(env_var, '')
+            keys.append({
+                "env_var": env_var,
+                "provider": provider_name,
+                "is_set": bool(value),
+                "masked_value": f"{value[:4]}...{value[-4:]}" if len(value) > 8 else ("****" if value else ""),
+            })
+
+        return respond(200, {"api_keys": keys}, event=event)
+
+    except Exception as e:
+        logger.error(f"Error getting API keys: {e}")
+        return respond(500, {"error": "Failed to get API keys"}, event=event)
+
+@log_handler
+@require_admin_role
+def update_api_keys(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    PUT /v1/admin/api-keys - Update API keys on Lambda env vars (admin only)
+    Body: { "keys": { "OPENAI_API_KEY": "sk-...", "GROQ_API_KEY": "gsk_..." } }
+    """
+    try:
+        import boto3
+
+        body = json.loads(event.get('body', '{}'))
+        keys_to_update = body.get('keys', {})
+
+        if not keys_to_update:
+            return respond(400, {"error": "No keys provided"}, event=event)
+
+        # Validate only allowed keys
+        for key in keys_to_update:
+            if key not in MANAGED_API_KEYS:
+                return respond(400, {
+                    "error": f"Invalid key: {key}. Allowed: {', '.join(MANAGED_API_KEYS.keys())}"
+                }, event=event)
+
+        # Get current Lambda function name
+        function_name = os.environ.get('AWS_LAMBDA_FUNCTION_NAME')
+        if not function_name:
+            return respond(500, {"error": "Cannot determine Lambda function name"}, event=event)
+
+        # Update Lambda environment variables
+        lambda_client = boto3.client('lambda', region_name=os.environ.get('AWS_REGION', 'ap-south-1'))
+
+        # Get current config
+        current_config = lambda_client.get_function_configuration(FunctionName=function_name)
+        current_env = current_config.get('Environment', {}).get('Variables', {})
+
+        # Merge new keys (only update provided ones, keep others)
+        updated_env = {**current_env}
+        updated_keys = []
+        for key, value in keys_to_update.items():
+            if value:  # Don't set empty values
+                updated_env[key] = value
+                updated_keys.append(key)
+
+        # Apply update
+        lambda_client.update_function_configuration(
+            FunctionName=function_name,
+            Environment={'Variables': updated_env}
+        )
+
+        # Also update os.environ for the current invocation
+        for key, value in keys_to_update.items():
+            if value:
+                os.environ[key] = value
+
+        admin_id = event.get('requestContext', {}).get('authorizer', {}).get('userId', 'unknown')
+        logger.info(f"Admin {admin_id} updated API keys: {updated_keys}")
+
+        return respond(200, {
+            "message": f"Updated {len(updated_keys)} API key(s)",
+            "updated_keys": updated_keys
+        }, event=event)
+
+    except Exception as e:
+        logger.error(f"Error updating API keys: {e}")
+        return respond(500, {"error": str(e)}, event=event)

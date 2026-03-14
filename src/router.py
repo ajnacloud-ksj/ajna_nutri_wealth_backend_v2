@@ -53,6 +53,8 @@ ROUTES = [
     ('PUT', r'^/v1/admin/users/(?P<user_id>[a-zA-Z0-9-]+)/status$', admin.toggle_user_status),
     ('GET', r'^/v1/admin/stats$', admin.get_system_stats),
     ('PUT', r'^/v1/admin/models/config/(?P<use_case>[a-zA-Z0-9_]+)$', admin.update_model_config_admin),
+    ('GET', r'^/v1/admin/api-keys$', admin.get_api_keys),
+    ('PUT', r'^/v1/admin/api-keys$', admin.update_api_keys),
 
     # Auth
     ('GET', r'^/v1/auth/config$', auth.get_config),
