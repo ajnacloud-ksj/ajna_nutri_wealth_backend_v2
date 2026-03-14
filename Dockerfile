@@ -1,5 +1,8 @@
 FROM public.ecr.aws/lambda/python:3.12
 
+# Install ffmpeg for audio format conversion (webm→wav for Sarvam AI)
+RUN dnf install -y ffmpeg-free && dnf clean all
+
 # Install uv for fast Python package management
 RUN pip install uv
 

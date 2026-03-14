@@ -77,6 +77,25 @@ def _transcribe_whisper(tmp_path: str) -> Dict[str, Any]:
     }
 
 
+def _convert_to_wav(input_path: str) -> str:
+    """Convert audio file to WAV using ffmpeg. Returns path to WAV file."""
+    import subprocess
+    wav_path = input_path.rsplit('.', 1)[0] + '_converted.wav'
+    try:
+        result = subprocess.run(
+            ['ffmpeg', '-i', input_path, '-ar', '16000', '-ac', '1', '-y', wav_path],
+            capture_output=True, text=True, timeout=30
+        )
+        if result.returncode == 0 and os.path.exists(wav_path):
+            return wav_path
+        logger.warning(f"ffmpeg conversion failed: {result.stderr[:200]}")
+    except FileNotFoundError:
+        logger.warning("ffmpeg not available, skipping audio conversion")
+    except Exception as e:
+        logger.warning(f"Audio conversion error: {e}")
+    return ""
+
+
 def _transcribe_sarvam(tmp_path: str, language_code: str = "unknown") -> Dict[str, Any]:
     """Transcribe using Sarvam AI Saaras model (REST API, config from DB/model_manager)"""
     cfg = _get_sarvam_config()
@@ -86,16 +105,32 @@ def _transcribe_sarvam(tmp_path: str, language_code: str = "unknown") -> Dict[st
         "Accept": "application/json"
     }
 
+    # Sarvam works best with WAV/MP3. Convert webm/mp4 to WAV if ffmpeg is available.
     filename = os.path.basename(tmp_path)
     ext = filename.rsplit('.', 1)[-1] if '.' in filename else 'webm'
-    mime_map = {
-        'webm': 'audio/webm', 'mp3': 'audio/mpeg', 'mp4': 'audio/mp4',
-        'wav': 'audio/wav', 'ogg': 'audio/ogg', 'm4a': 'audio/mp4'
-    }
-    mime = mime_map.get(ext, 'audio/webm')
+    send_path = tmp_path
+    send_ext = ext
+    send_mime = 'audio/wav'
 
-    with open(tmp_path, 'rb') as f:
-        files = {"file": (f"audio.{ext}", f, mime)}
+    if ext in ('webm', 'mp4', 'ogg'):
+        wav_path = _convert_to_wav(tmp_path)
+        if wav_path:
+            send_path = wav_path
+            send_ext = 'wav'
+            send_mime = 'audio/wav'
+        else:
+            # Fallback: send as-is
+            mime_map = {
+                'webm': 'audio/webm', 'mp3': 'audio/mpeg', 'mp4': 'audio/mp4',
+                'wav': 'audio/wav', 'ogg': 'audio/ogg', 'm4a': 'audio/mp4'
+            }
+            send_mime = mime_map.get(ext, 'audio/webm')
+    elif ext in ('wav', 'mp3', 'flac'):
+        mime_map = {'wav': 'audio/wav', 'mp3': 'audio/mpeg', 'flac': 'audio/flac'}
+        send_mime = mime_map.get(ext, 'audio/wav')
+
+    with open(send_path, 'rb') as f:
+        files = {"file": (f"audio.{send_ext}", f, send_mime)}
         data = {
             "model": cfg["stt_model"],
             "language_code": language_code,
@@ -106,6 +141,10 @@ def _transcribe_sarvam(tmp_path: str, language_code: str = "unknown") -> Dict[st
             cfg["stt_url"], headers=headers, files=files, data=data,
             timeout=60
         )
+
+    # Cleanup converted file
+    if send_path != tmp_path and os.path.exists(send_path):
+        os.unlink(send_path)
 
     if response.status_code not in (200, 201):
         raise Exception(f"Sarvam API error {response.status_code}: {response.text[:200]}")
