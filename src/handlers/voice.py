@@ -1,6 +1,6 @@
 """
 Voice handler supporting:
-  - STT: OpenAI Whisper + Sarvam AI Saaras (speech-to-text)
+  - STT: Groq Whisper (primary) + Sarvam AI Saaras (fallback)
   - TTS: Sarvam AI Bulbul (text-to-speech)
 """
 
@@ -12,12 +12,12 @@ import os
 from typing import Dict, Any
 
 import requests as http_requests
+from groq import Groq
 from utils.http import respond, get_user_id
 from utils.timestamps import utc_now
 from lib.auth_provider import require_auth
 from lib.logger import logger
 from lib.model_manager import get_model_manager
-from openai import OpenAI
 
 
 def _get_sarvam_config():
@@ -30,39 +30,32 @@ def _get_sarvam_config():
     tts_config = manager.get_model_config("voice_tts")
     return {
         "api_key": api_key,
-        "stt_model": stt_config.model_name,  # e.g. "saaras:v3"
-        "tts_model": tts_config.model_name,  # e.g. "bulbul:v3"
+        "stt_model": stt_config.model_name,
+        "tts_model": tts_config.model_name,
         "stt_url": f"{stt_config.base_url}/speech-to-text",
         "tts_url": f"{tts_config.base_url}/text-to-speech",
     }
 
 
-def _get_openai_client():
-    """Get OpenAI client for Whisper"""
+def _get_groq_client():
+    """Get Groq client for Whisper transcription"""
     manager = get_model_manager()
-    api_key = manager.get_api_key("openai")
-    return OpenAI(api_key=api_key, timeout=60.0, max_retries=2)
+    api_key = manager.get_api_key("groq")
+    if not api_key:
+        raise Exception("GROQ_API_KEY not configured")
+    return Groq(api_key=api_key, timeout=60.0, max_retries=2)
 
 
-def _transcribe_whisper(tmp_path: str) -> Dict[str, Any]:
-    """Transcribe using OpenAI Whisper"""
-    client = _get_openai_client()
-
-    # Whisper requires a recognized extension. If the file has an unrecognized extension,
-    # rename it to .webm (the most common browser recording format).
-    import shutil
-    ext = os.path.splitext(tmp_path)[1].lower()
-    valid_exts = {'.flac', '.m4a', '.mp3', '.mp4', '.mpeg', '.mpga', '.oga', '.ogg', '.wav', '.webm'}
-    if ext not in valid_exts:
-        new_path = tmp_path + '.webm'
-        shutil.copy2(tmp_path, new_path)
-        tmp_path = new_path
+def _transcribe_groq(tmp_path: str) -> Dict[str, Any]:
+    """Transcribe using Groq Whisper-large-v3 (fast, high quality)"""
+    client = _get_groq_client()
 
     with open(tmp_path, 'rb') as audio_file:
         transcription = client.audio.transcriptions.create(
-            model="whisper-1",
-            file=audio_file,
-            response_format="verbose_json"
+            file=(os.path.basename(tmp_path), audio_file.read()),
+            model="whisper-large-v3",
+            temperature=0,
+            response_format="verbose_json",
         )
 
     text = transcription.text.strip()
@@ -71,9 +64,9 @@ def _transcribe_whisper(tmp_path: str) -> Dict[str, Any]:
     return {
         "text": text,
         "duration": duration,
-        "engine": "whisper",
-        "model": "whisper-1",
-        "cost": (duration / 60) * 0.006  # ~$0.006/min
+        "engine": "groq",
+        "model": "whisper-large-v3",
+        "cost": 0.0  # Groq Whisper is free
     }
 
 
@@ -172,10 +165,10 @@ def transcribe(event, context):
     Body: {
         "audio": "<base64 encoded audio>",
         "format": "webm",
-        "engine": "whisper" | "sarvam" (default: "whisper"),
+        "engine": "groq" | "sarvam" (default: "groq"),
         "language": "unknown" (for sarvam language_code)
     }
-    Returns: { "text": "transcribed text", "duration": 3.2, "engine": "whisper" }
+    Returns: { "text": "transcribed text", "duration": 3.2, "engine": "groq" }
     """
     db = context['db']
     user_id = get_user_id(event) or 'local-dev-user'
@@ -187,7 +180,7 @@ def transcribe(event, context):
 
     audio_b64 = body.get('audio', '')
     audio_format = body.get('format', 'webm')
-    engine = body.get('engine', 'whisper')  # "whisper" or "sarvam"
+    engine = body.get('engine', 'groq')  # "groq" or "sarvam"
     language = body.get('language', 'unknown')
 
     if not audio_b64:
@@ -215,23 +208,29 @@ def transcribe(event, context):
             tmp.write(audio_bytes)
             tmp_path = tmp.name
 
-        # Transcribe with selected engine, fallback to other on failure
+        # Transcribe: Groq Whisper (primary) → Sarvam (fallback)
         result = None
         fallback_used = False
 
         if engine == "sarvam":
+            # User explicitly chose Sarvam
             try:
                 result = _transcribe_sarvam(tmp_path, language)
             except Exception as e:
-                logger.warning(f"Sarvam transcription failed, falling back to Whisper: {e}")
-                result = _transcribe_whisper(tmp_path)
+                logger.warning(f"Sarvam transcription failed, falling back to Groq Whisper: {e}")
+                result = _transcribe_groq(tmp_path)
                 fallback_used = True
         else:
+            # Default: Groq Whisper → Sarvam fallback
             try:
-                result = _transcribe_whisper(tmp_path)
+                result = _transcribe_groq(tmp_path)
             except Exception as e:
-                logger.warning(f"Whisper transcription failed, falling back to Sarvam: {e}")
-                result = _transcribe_sarvam(tmp_path, language)
+                logger.warning(f"Groq Whisper failed, falling back to Sarvam: {e}")
+                try:
+                    result = _transcribe_sarvam(tmp_path, language)
+                except Exception as e2:
+                    logger.error(f"Sarvam fallback also failed: {e2}")
+                    raise Exception(f"All transcription engines failed. Groq: {e}, Sarvam: {e2}")
                 fallback_used = True
 
         text = result["text"]
