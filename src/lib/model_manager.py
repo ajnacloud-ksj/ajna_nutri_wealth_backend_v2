@@ -99,12 +99,12 @@ class ModelManager:
         "shopping": ModelConfig(
             use_case="shopping",
             provider="openai",
-            model_name="gpt-5.4",
+            model_name="gpt-5-mini",
             base_url="https://api.openai.com/v1",
             temperature=0.3,
             max_tokens=4096,
             timeout_seconds=45,
-            cost_per_1k_tokens=0.005,
+            cost_per_1k_tokens=0.0003,
             api_key_env="OPENAI_API_KEY"
         ),
         "voice_stt": ModelConfig(
@@ -367,7 +367,7 @@ class ModelManager:
         """List available models per provider"""
         return {
             "openai": [
-                "gpt-5.4",
+                "gpt-5-mini",
                 "gpt-4o-mini",
                 "gpt-4o",
                 "gpt-4-turbo",
