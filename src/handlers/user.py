@@ -34,7 +34,8 @@ def get_current_user(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str
             "app_users_v4",
             filters=[{"field": "id", "operator": "eq", "value": user_id}],
             limit=1,
-            use_cache=False  # Always get fresh data for user profile
+            use_cache=False,
+            include_deleted=False
         )
 
         if result and result.get('success'):
@@ -79,7 +80,8 @@ def get_user_by_id(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, 
             "app_users_v4",
             filters=[{"field": "id", "operator": "eq", "value": current_user_id}],
             limit=1,
-            use_cache=False
+            use_cache=False,
+            include_deleted=False
         )
 
         if admin_check and admin_check.get('success'):
@@ -93,7 +95,8 @@ def get_user_by_id(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, 
             "app_users_v4",
             filters=[{"field": "id", "operator": "eq", "value": requested_user_id}],
             limit=1,
-            use_cache=False
+            use_cache=False,
+            include_deleted=False
         )
 
         if result and result.get('success'):

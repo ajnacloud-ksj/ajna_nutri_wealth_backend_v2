@@ -200,7 +200,7 @@ class ModelManager:
 
         try:
             # Check if table exists by querying it
-            result = self.db.query("ai_model_config", limit=1)
+            result = self.db.query("ai_model_config", limit=1, include_deleted=False)
 
             if not result.get('success'):
                 # Table doesn't exist, create default entries
@@ -268,7 +268,8 @@ class ModelManager:
                         {"field": "use_case", "operator": "eq", "value": use_case},
                         {"field": "is_active", "operator": "eq", "value": True}
                     ],
-                    limit=1
+                    limit=1,
+                    include_deleted=False
                 )
 
                 if result.get('success') and result.get('data', {}).get('records'):

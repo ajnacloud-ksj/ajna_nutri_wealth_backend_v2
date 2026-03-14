@@ -525,7 +525,7 @@ def _build_store_price_index(db, user_id: str, days: int = 180) -> Dict:
         receipts_result = db.query("app_receipts", filters=[
             {"field": "user_id", "operator": "eq", "value": user_id},
             {"field": "created_at", "operator": "gte", "value": cutoff}
-        ], sort=[{"field": "created_at", "order": "desc"}], limit=200)
+        ], sort=[{"field": "created_at", "order": "desc"}], limit=200, include_deleted=False)
 
         if receipts_result.get('success'):
             for r in receipts_result.get('data', {}).get('records', []):
@@ -600,7 +600,7 @@ def _build_store_price_index(db, user_id: str, days: int = 180) -> Dict:
         try:
             items_result = db.query("app_receipt_items", filters=[
                 {"field": "created_at", "operator": "gte", "value": cutoff}
-            ], sort=[{"field": "created_at", "order": "desc"}], limit=500)
+            ], sort=[{"field": "created_at", "order": "desc"}], limit=500, include_deleted=False)
 
             if items_result.get('success'):
                 for row in items_result.get('data', {}).get('records', []):
@@ -649,7 +649,7 @@ def _find_vector_matches(db, items: List[Dict], days: int = 90) -> Dict:
             cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).strftime('%Y-%m-%dT%H:%M:%S')
             emb_result = db.query("app_receipt_item_embeddings", filters=[
                 {"field": "created_at", "operator": "gte", "value": cutoff}
-            ], sort=[{"field": "created_at", "order": "desc"}], limit=500)
+            ], sort=[{"field": "created_at", "order": "desc"}], limit=500, include_deleted=False)
 
             candidates = []
             if emb_result.get('success'):
@@ -725,7 +725,7 @@ def prepare_list(event, context):
             food_result = db.query("app_food_entries_v2", filters=[
                 {"field": "user_id", "operator": "eq", "value": user_id},
                 {"field": "created_at", "operator": "gte", "value": cutoff}
-            ], sort=[{"field": "created_at", "order": "desc"}], limit=50)
+            ], sort=[{"field": "created_at", "order": "desc"}], limit=50, include_deleted=False)
 
             if food_result.get('success'):
                 food_history = food_result.get('data', {}).get('records', [])
@@ -998,7 +998,7 @@ def optimize_all(event, context):
             food_result = db.query("app_food_entries_v2", filters=[
                 {"field": "user_id", "operator": "eq", "value": user_id},
                 {"field": "created_at", "operator": "gte", "value": cutoff}
-            ], sort=[{"field": "created_at", "order": "desc"}], limit=50)
+            ], sort=[{"field": "created_at", "order": "desc"}], limit=50, include_deleted=False)
             if food_result.get('success'):
                 food_history = food_result.get('data', {}).get('records', [])
         except Exception as e:

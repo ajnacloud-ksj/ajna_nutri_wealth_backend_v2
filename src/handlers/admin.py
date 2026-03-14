@@ -32,7 +32,7 @@ def list_users_admin(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str
         if role_filter:
             kwargs["filters"] = [{"field": "role", "operator": "eq", "value": role_filter}]
 
-        result = db.query("users_v4", use_cache=False, **kwargs)
+        result = db.query("users_v4", use_cache=False, include_deleted=False, **kwargs)
 
         if result and result.get('success'):
             data = result.get('data', {})
@@ -180,7 +180,7 @@ def get_system_stats(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str
         db = context['db']
 
         # Get user counts by role
-        users_result = db.query("users_v4", limit=1000, use_cache=False)
+        users_result = db.query("users_v4", limit=1000, use_cache=False, include_deleted=False)
         user_stats = {
             "total": 0,
             "admins": 0,
@@ -211,7 +211,7 @@ def get_system_stats(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str
 
         for table in tables:
             try:
-                result = db.query(f"app_{table}", limit=1)
+                result = db.query(f"app_{table}", limit=1, include_deleted=False)
                 if result and result.get('success'):
                     # Since we can't get total count easily, we'll estimate
                     entry_stats[table] = "Available"
@@ -229,7 +229,8 @@ def get_system_stats(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str
             result = db.query(
                 "food_entries_v2",
                 filters=[{"field": "created_at", "operator": "gte", "value": yesterday}],
-                limit=100
+                limit=100,
+                include_deleted=False
             )
             if result and result.get('success'):
                 recent_entries = len(result.get('data', {}).get('records', []))

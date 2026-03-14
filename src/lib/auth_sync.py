@@ -28,7 +28,8 @@ def ensure_user_exists(user_id: str, user_claims: Dict[str, Any], db) -> bool:
             "app_users_v4",
             filters=[{"field": "id", "operator": "eq", "value": user_id}],
             limit=1,
-            use_cache=False  # Always check fresh data
+            use_cache=False,
+            include_deleted=False
         )
 
         if result and result.get('success'):
@@ -54,7 +55,7 @@ def ensure_user_exists(user_id: str, user_claims: Dict[str, Any], db) -> bool:
         role = user_claims.get('custom:role', 'participant')
         # For first user in system, make them admin
         # Check if this is the first user
-        all_users_result = db.query("app_users_v4", limit=1)
+        all_users_result = db.query("app_users_v4", limit=1, include_deleted=False)
         if all_users_result and all_users_result.get('success'):
             existing_users = all_users_result.get('data', {}).get('records', [])
             if len(existing_users) == 0:
@@ -153,7 +154,8 @@ def get_user_role(user_id: str, db) -> Optional[str]:
             "app_users_v4",
             filters=[{"field": "id", "operator": "eq", "value": user_id}],
             limit=1,
-            use_cache=False
+            use_cache=False,
+            include_deleted=False
         )
 
         if result and result.get('success'):

@@ -25,7 +25,7 @@ def get_receipt_with_items(event, context):
         receipt_result = db.query("app_receipts", filters=[
             {"field": "id", "operator": "eq", "value": receipt_id},
             {"field": "user_id", "operator": "eq", "value": user_id}
-        ], limit=1)
+        ], limit=1, include_deleted=False)
 
         if not receipt_result.get('success'):
             return respond(500, {"error": "Failed to fetch receipt"})
@@ -42,7 +42,7 @@ def get_receipt_with_items(event, context):
         # Fetch items
         items_result = db.query("app_receipt_items", filters=[
             {"field": "receipt_id", "operator": "eq", "value": receipt_id}
-        ], limit=100)
+        ], limit=100, include_deleted=False)
 
         items = []
         if items_result.get('success'):
@@ -127,7 +127,7 @@ def list_receipts(event, context):
     try:
         result = db.query("app_receipts", filters=[
             {"field": "user_id", "operator": "eq", "value": user_id}
-        ], sort=[{"field": "created_at", "order": "desc"}], limit=50)
+        ], sort=[{"field": "created_at", "order": "desc"}], limit=50, include_deleted=False)
 
         if result.get('success'):
             receipts = result.get('data', {}).get('records', [])

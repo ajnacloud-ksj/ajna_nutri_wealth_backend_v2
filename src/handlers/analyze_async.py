@@ -328,7 +328,8 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
                              {"field": "user_id", "operator": "eq", "value": user_id}
                          ],
                          limit=1,
-                         use_cache=False)  # Don't use cache to get latest data
+                         use_cache=False,
+                         include_deleted=False)
 
         if not result.get('success') or not result.get('data', {}).get('records'):
             logger.error(f"Pending analysis record not found for entry_id={entry_id}")

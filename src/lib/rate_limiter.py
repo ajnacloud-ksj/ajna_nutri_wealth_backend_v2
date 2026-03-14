@@ -23,7 +23,8 @@ def check_analysis_quota(db, user_id: str) -> tuple:
         sub_result = db.query(
             "app_users_v4",
             filters=[{"field": "id", "operator": "eq", "value": user_id}],
-            limit=1
+            limit=1,
+            include_deleted=False
         )
         sub_records = sub_result.get('data', {}).get('records', [])
 
@@ -41,7 +42,8 @@ def check_analysis_quota(db, user_id: str) -> tuple:
                 {"field": "created_at", "operator": "gte", "value": today + "T00:00:00"},
                 {"field": "created_at", "operator": "lt", "value": today + "T23:59:59"}
             ],
-            limit=1000
+            limit=1000,
+            include_deleted=False
         )
         count_records = count_result.get('data', {}).get('records', [])
         used_today = len(count_records)

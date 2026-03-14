@@ -179,7 +179,7 @@ def get_file(event, context):
         
         # Use correct table name with resolution
         db_table_name = resolve_table_name("images")
-        result = db.query(db_table_name, filters=filters, limit=1)
+        result = db.query(db_table_name, filters=filters, limit=1, include_deleted=False)
         
         items = result.get('data', [])
         if not items:

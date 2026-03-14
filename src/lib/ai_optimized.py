@@ -171,7 +171,7 @@ Return ONLY a JSON object with:
             res = self.db.query("app_prompts", filters=[
                 {"field": "category", "operator": "eq", "value": category},
                 {"field": "is_active", "operator": "eq", "value": True}
-            ], limit=1)
+            ], limit=1, include_deleted=False)
 
             if res and res.get('success'):
                 data = res.get('data', {})
@@ -556,7 +556,8 @@ Return ONLY a JSON object with:
                     {"field": "created_at", "operator": "gte", "value": start_date.isoformat()}
                 ],
                 sort=[{"field": "created_at", "order": "desc"}],
-                limit=1000
+                limit=1000,
+                include_deleted=False
             )
 
             if not result.get('success'):

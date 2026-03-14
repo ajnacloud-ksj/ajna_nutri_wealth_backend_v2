@@ -146,7 +146,7 @@ def zvec_load_from_ibexdb(db, days: int = 90):
 
         result = db.query("app_receipt_item_embeddings", filters=[
             {"field": "created_at", "operator": "gte", "value": cutoff}
-        ], limit=2000)
+        ], limit=2000, include_deleted=False)
 
         if not result.get('success'):
             logger.warning(f"Failed to load embeddings from IbexDB: {result.get('error')}")
