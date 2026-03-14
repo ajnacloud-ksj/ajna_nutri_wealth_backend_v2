@@ -206,6 +206,8 @@ def list_lists(event, context):
 
         if result.get('success'):
             lists = result.get('data', {}).get('records', [])
+            # Filter out archived lists
+            lists = [l for l in lists if l.get('status') != 'archived']
             return respond(200, {"lists": lists, "total": len(lists)})
         else:
             return respond(500, {"error": "Failed to fetch lists"})
@@ -930,7 +932,21 @@ def optimize_all(event, context):
         if not active_lists:
             return respond(400, {"error": "No active shopping lists found"})
 
-        # 2. Gather unpurchased items from all lists
+        # 1b. Archive any previous optimized plans (keep only one active at a time)
+        now = utc_now()
+        for lst in active_lists:
+            if (lst.get('name') or '').startswith('Optimized Plan'):
+                db.update("app_shopping_lists",
+                          filters=[{"field": "id", "operator": "eq", "value": lst['id']}],
+                          updates={"status": "archived", "updated_at": now})
+                logger.info(f"Archived previous optimized plan: {lst['id']}")
+
+        # Re-filter to exclude archived optimized plans from item gathering
+        active_lists = [l for l in active_lists if not (l.get('name') or '').startswith('Optimized Plan')]
+        if not active_lists:
+            return respond(400, {"error": "No non-optimized shopping lists with items"})
+
+        # 2. Gather unpurchased items from all lists (excluding archived optimized plans)
         all_items = []
         source_lists = []
         for lst in active_lists:
