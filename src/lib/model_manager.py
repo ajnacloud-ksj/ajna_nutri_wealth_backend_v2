@@ -44,6 +44,14 @@ class ModelConfig:
             return {"max_completion_tokens": tokens}
         return {"max_tokens": tokens}
 
+    def temperature_kwargs(self, override: Optional[float] = None) -> dict:
+        """Return temperature kwarg if the model supports it.
+        Newer models (gpt-5*, o1*, o3*, o4*) only support default temperature."""
+        if any(self.model_name.startswith(p) for p in ("gpt-5", "o1", "o3", "o4")):
+            return {}
+        temp = override if override is not None else self.temperature
+        return {"temperature": temp}
+
 
 class ModelManager:
     """

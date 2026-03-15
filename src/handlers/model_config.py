@@ -210,14 +210,21 @@ def test_model(event, context):
         start_time = time.time()
 
         try:
+            # Newer models (gpt-5*, o1*, o3*, o4*) don't support temperature param
+            extra_kwargs = {}
+            if not any(model.startswith(p) for p in ("gpt-5", "o1", "o3", "o4")):
+                extra_kwargs["temperature"] = 0
+                extra_kwargs["max_tokens"] = 50
+            else:
+                extra_kwargs["max_completion_tokens"] = 50
+
             response = client.chat.completions.create(
                 model=model,
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant."},
                     {"role": "user", "content": test_prompt}
                 ],
-                max_tokens=50,
-                temperature=0
+                **extra_kwargs
             )
 
             elapsed = time.time() - start_time

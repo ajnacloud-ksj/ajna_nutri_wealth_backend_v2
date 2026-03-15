@@ -136,7 +136,7 @@ Return ONLY a JSON object with:
             response = client.chat.completions.create(
                 model=config.model_name,
                 messages=messages,
-                temperature=config.temperature,
+                **config.temperature_kwargs(),
                 **config.token_kwargs(),
                 response_format={"type": "json_object"}
             )
@@ -405,7 +405,7 @@ Return ONLY a JSON object with:
             completion = client.chat.completions.create(
                 model=config.model_name,
                 messages=messages,
-                temperature=config.temperature,
+                **config.temperature_kwargs(),
                 **config.token_kwargs(),
                 response_format=response_format
             )
@@ -432,7 +432,7 @@ Return ONLY a JSON object with:
                     retry_completion = client.chat.completions.create(
                         model=config.model_name,
                         messages=retry_messages,
-                        temperature=0,  # Use zero temperature for retry
+                        **config.temperature_kwargs(0),  # Use zero temperature for retry
                         **config.token_kwargs(),
                         response_format=response_format
                     )

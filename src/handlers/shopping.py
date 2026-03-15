@@ -364,7 +364,7 @@ def add_items(event, context):
                     )},
                     {"role": "user", "content": f"Parse these shopping items: {text}"}
                 ],
-                temperature=0.1,
+                **config.temperature_kwargs(0.1),
                 **config.token_kwargs(),
                 response_format={
                     "type": "json_schema",
@@ -860,7 +860,7 @@ Create a store-grouped purchase plan. Group items by the best store based on thi
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            temperature=0.3,
+            **config.temperature_kwargs(0.3),
             **config.token_kwargs(4096),
             response_format={
                 "type": "json_schema",
@@ -1118,7 +1118,7 @@ Create a store-grouped purchase plan. Group items by the best store based on thi
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            temperature=0.3,
+            **config.temperature_kwargs(0.3),
             **config.token_kwargs(4096),
             response_format={
                 "type": "json_schema",
