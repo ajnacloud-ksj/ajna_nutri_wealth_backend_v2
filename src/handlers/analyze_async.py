@@ -464,15 +464,23 @@ def _store_food_result(db, user_id: str, entry_id: str, data: Dict, image_url: s
         total_fiber = 0
         total_sodium = 0
 
+        def _num(val, default=0):
+            """Coerce to float safely for nutrition values"""
+            if val is None:
+                return default
+            try:
+                return float(val)
+            except (ValueError, TypeError):
+                return default
+
         for item in food_items:
-            quantity = item.get('quantity', 1)
-            total_calories += (item.get('calories', 0) * quantity)
-            # Check both singular and plural field names
-            total_protein += (item.get('protein', item.get('proteins', 0)) * quantity)
-            total_carbohydrates += (item.get('carbs', item.get('carbohydrates', 0)) * quantity)
-            total_fats += (item.get('fat', item.get('fats', 0)) * quantity)
-            total_fiber += (item.get('fiber', 0) * quantity)
-            total_sodium += (item.get('sodium', 0) * quantity)
+            quantity = _num(item.get('quantity', 1)) or 1
+            total_calories += _num(item.get('calories', 0)) * quantity
+            total_protein += _num(item.get('protein', item.get('proteins', 0))) * quantity
+            total_carbohydrates += _num(item.get('carbs', item.get('carbohydrates', 0))) * quantity
+            total_fats += _num(item.get('fat', item.get('fats', 0))) * quantity
+            total_fiber += _num(item.get('fiber', 0)) * quantity
+            total_sodium += _num(item.get('sodium', 0)) * quantity
 
         # Always prefer AI-identified food names over user description
         # User descriptions are often generic ("AI-analyzed content", empty, etc.)
@@ -573,6 +581,17 @@ def _store_receipt_result(db, user_id: str, entry_id: str, data: Dict, image_url
         if merchant.lower().strip() in _INVALID_MERCHANTS:
             merchant = 'Unknown Vendor'
 
+        def _safe_float(val, default=0.0):
+            """Coerce value to float safely (AI may return strings like '$12.99')"""
+            if val is None:
+                return default
+            if isinstance(val, (int, float)):
+                return float(val)
+            try:
+                return float(str(val).replace('$', '').replace(',', '').strip())
+            except (ValueError, TypeError):
+                return default
+
         # Store main receipt record with all available fields
         receipt_record = {
             "id": entry_id,
@@ -586,10 +605,10 @@ def _store_receipt_result(db, user_id: str, entry_id: str, data: Dict, image_url
             "receipt_date": data.get('purchase_date', utc_date()),
             "receipt_time": data.get('purchase_time', ''),
             "purchase_channel": data.get('receipt_category', 'Retail'),
-            "total_amount": financial.get('total_amount', data.get('total_amount', 0)),
-            "subtotal": financial.get('subtotal', 0),
-            "tax_amount": financial.get('tax_amount', data.get('tax_amount', 0)),
-            "discount_amount": financial.get('discount_amount', 0),
+            "total_amount": _safe_float(financial.get('total_amount', data.get('total_amount', 0))),
+            "subtotal": _safe_float(financial.get('subtotal', 0)),
+            "tax_amount": _safe_float(financial.get('tax_amount', data.get('tax_amount', 0))),
+            "discount_amount": _safe_float(financial.get('discount_amount', 0)),
             "currency": financial.get('currency', 'USD'),
             "payment_method": payment.get('method', ''),
             "card_last_digits": payment.get('card_last_digits', ''),
@@ -613,16 +632,17 @@ def _store_receipt_result(db, user_id: str, entry_id: str, data: Dict, image_url
         if items:
             item_records = []
             for idx, item in enumerate(items):
+                qty = _safe_float(item.get('quantity', 1)) or 1
+                unit_p = _safe_float(item.get('unit_price', item.get('price', 0)))
                 item_record = {
                     "id": str(uuid.uuid4()),
                     "receipt_id": entry_id,
                     "name": item.get('name', f'Item {idx+1}'),
                     "sku": item.get('sku', ''),
-                    "quantity": item.get('quantity', 1),
-                    "unit_price": item.get('unit_price', item.get('price', 0)),
-                    "total_price": item.get('total_price',
-                                  item.get('quantity', 1) * item.get('unit_price', item.get('price', 0))),
-                    "discount": item.get('discount', 0),
+                    "quantity": qty,
+                    "unit_price": unit_p,
+                    "total_price": _safe_float(item.get('total_price', qty * unit_p)),
+                    "discount": _safe_float(item.get('discount', 0)),
                     "category": item.get('category', 'Other'),
                     "department": item.get('department', ''),
                     "is_taxable": item.get('is_taxable', True),

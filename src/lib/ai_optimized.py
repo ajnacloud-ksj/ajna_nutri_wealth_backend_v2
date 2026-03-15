@@ -435,8 +435,17 @@ Return ONLY a JSON object with:
             )
 
             analysis_text = completion.choices[0].message.content
-            analysis_tokens = completion.usage.total_tokens
+            analysis_tokens = completion.usage.total_tokens if completion.usage else 0
             total_tokens += analysis_tokens
+
+            # Handle None/empty analysis response
+            if not analysis_text or not analysis_text.strip():
+                logger.error(f"Analysis returned empty content for category={category}")
+                return {
+                    "success": False,
+                    "error": f"AI returned empty response for {category} analysis",
+                    "category": category
+                }
 
             # Parse result with retry logic for receipts
             try:

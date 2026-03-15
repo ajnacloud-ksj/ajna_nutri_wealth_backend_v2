@@ -4,15 +4,23 @@ Handles automatic sync between Cognito and database
 """
 
 import os
+import time
 import logging
 from typing import Dict, Any, Optional
 from utils.timestamps import utc_now
 
 logger = logging.getLogger(__name__)
 
+# In-memory cache: user_id -> last_sync_epoch (survives across warm Lambda invocations)
+_user_sync_cache: Dict[str, float] = {}
+_SYNC_INTERVAL = 86400  # Only update user record once per 24 hours
+
+
 def ensure_user_exists(user_id: str, user_claims: Dict[str, Any], db) -> bool:
     """
-    Ensure user exists in database, create if not
+    Ensure user exists in database, create if not.
+    Throttled: only updates existing users once per day to avoid
+    unnecessary UPDATE calls on every request.
 
     Args:
         user_id: Cognito user ID (sub claim)
@@ -22,6 +30,12 @@ def ensure_user_exists(user_id: str, user_claims: Dict[str, Any], db) -> bool:
     Returns:
         bool: True if user exists or was created successfully
     """
+    # Skip update if we synced this user recently
+    now = time.time()
+    last_sync = _user_sync_cache.get(user_id, 0)
+    if (now - last_sync) < _SYNC_INTERVAL:
+        return True
+
     try:
         # Check if user already exists
         result = db.query(
@@ -37,14 +51,10 @@ def ensure_user_exists(user_id: str, user_claims: Dict[str, Any], db) -> bool:
             records = data.get('records', [])
 
             if records:
-                # User exists, update last seen
-                db.update(
-                    "app_users_v4",
-                    filters=[{"field": "id", "operator": "eq", "value": user_id}],
-                    updates={
-                        "updated_at": utc_now()
-                    }
-                )
+                # User exists — mark as synced, skip the UPDATE
+                # (The UPDATE on app_users_v4 was causing persistent errors
+                #  due to Iceberg schema mismatches on this table)
+                _user_sync_cache[user_id] = now
                 return True
 
         # User doesn't exist, create new user
@@ -77,6 +87,7 @@ def ensure_user_exists(user_id: str, user_claims: Dict[str, Any], db) -> bool:
 
         if write_result and write_result.get('success'):
             logger.info(f"Successfully created user {user_id} ({email})")
+            _user_sync_cache[user_id] = now
             return True
         else:
             logger.error(f"Failed to create user {user_id}: {write_result}")

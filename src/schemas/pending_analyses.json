@@ -44,6 +44,10 @@
             "type": "string",
             "required": false
         },
+        "failed_at": {
+            "type": "string",
+            "required": false
+        },
         "created_at": {
             "type": "string",
             "required": true
