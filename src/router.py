@@ -46,6 +46,9 @@ ROUTES = [
     ('DELETE', r'^/v1/admin/database/cleanup$', database_admin.cleanup_database),
     ('POST', r'^/v1/admin/database/reset$', database_admin.reset_database),
     ('GET', r'^/v1/admin/database/health$', database_admin.database_health_check),
+    ('GET', r'^/v1/admin/database/tables$', database_admin.list_tables),
+    ('POST', r'^/v1/admin/database/optimize$', database_admin.optimize_table),
+    ('POST', r'^/v1/admin/database/optimize-all$', database_admin.optimize_all_tables),
 
     # Admin User & System Management
     ('GET', r'^/v1/admin/users$', admin.list_users_admin),

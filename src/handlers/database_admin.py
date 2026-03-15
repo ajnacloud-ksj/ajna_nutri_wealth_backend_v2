@@ -283,6 +283,122 @@ def reset_database(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, 
         return respond(500, {"error": f"Failed to reset database: {str(e)}"}, event=event)
 
 @log_handler
+@require_admin_role
+def list_tables(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    GET /v1/admin/database/tables - List all tables with basic info
+    """
+    try:
+        db = context['db']
+        list_result = db.list_tables()
+
+        if not list_result.get('success'):
+            return respond(500, {"error": "Failed to list tables"}, event=event)
+
+        tables = list_result.get('data', {}).get('tables', [])
+
+        return respond(200, {
+            "tables": sorted(tables),
+            "count": len(tables)
+        }, event=event)
+
+    except Exception as e:
+        logger.error(f"Error listing tables: {e}", exc_info=True)
+        return respond(500, {"error": str(e)}, event=event)
+
+
+@log_handler
+@require_admin_role
+def optimize_table(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    POST /v1/admin/database/optimize - Compact a table to merge small files
+    """
+    try:
+        db = context['db']
+        body = json.loads(event.get('body', '{}'))
+        table = body.get('table')
+
+        if not table:
+            return respond(400, {"error": "table is required"}, event=event)
+
+        force = body.get('force', True)
+
+        logger.info(f"Running compaction on table: {table} (force={force})")
+        result = db.compact(table=table, force=force)
+
+        if result.get('success'):
+            data = result.get('data', {})
+            stats = data.get('stats')
+            return respond(200, {
+                "table": table,
+                "compacted": data.get('compacted', False),
+                "reason": data.get('reason'),
+                "stats": stats
+            }, event=event)
+        else:
+            return respond(500, {
+                "error": result.get('error', 'Compaction failed'),
+                "table": table
+            }, event=event)
+
+    except Exception as e:
+        logger.error(f"Error optimizing table: {e}", exc_info=True)
+        return respond(500, {"error": str(e)}, event=event)
+
+
+@log_handler
+@require_admin_role
+def optimize_all_tables(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    POST /v1/admin/database/optimize-all - Compact all app tables
+    """
+    try:
+        db = context['db']
+        list_result = db.list_tables()
+
+        if not list_result.get('success'):
+            return respond(500, {"error": "Failed to list tables"}, event=event)
+
+        tables = [t for t in list_result.get('data', {}).get('tables', []) if t.startswith('app_')]
+        results = []
+
+        for table in sorted(tables):
+            try:
+                result = db.compact(table=table, force=True)
+                if result.get('success'):
+                    data = result.get('data', {})
+                    results.append({
+                        "table": table,
+                        "compacted": data.get('compacted', False),
+                        "reason": data.get('reason'),
+                        "stats": data.get('stats')
+                    })
+                else:
+                    results.append({
+                        "table": table,
+                        "compacted": False,
+                        "reason": str(result.get('error', 'Failed'))
+                    })
+            except Exception as e:
+                results.append({
+                    "table": table,
+                    "compacted": False,
+                    "reason": str(e)
+                })
+
+        compacted_count = sum(1 for r in results if r.get('compacted'))
+        return respond(200, {
+            "results": results,
+            "total_tables": len(results),
+            "compacted": compacted_count
+        }, event=event)
+
+    except Exception as e:
+        logger.error(f"Error optimizing all tables: {e}", exc_info=True)
+        return respond(500, {"error": str(e)}, event=event)
+
+
+@log_handler
 def database_health_check(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
     """
     GET /v1/admin/database/health - Check database health (no auth required for health checks)
