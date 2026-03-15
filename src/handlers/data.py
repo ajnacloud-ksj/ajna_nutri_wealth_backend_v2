@@ -22,7 +22,7 @@ def resolve_image_urls(db, records: list) -> list:
         image_url = record.get('image_url')
         if image_url and isinstance(image_url, str) and image_url.startswith('uploads/'):
             try:
-                res = db.get_download_url(image_url, expiry_seconds=3600)
+                res = db.get_download_url(image_url, expires_in=3600)
                 if res.get('success'):
                     presigned = res.get('data', {}).get('download_url')
                     if presigned:

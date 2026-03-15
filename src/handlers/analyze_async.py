@@ -240,7 +240,7 @@ def get_analysis_status(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Resolve S3 image keys to presigned URLs via IbexDB
         if response.get('result') and response['result'].get('image_url', '').startswith('uploads/'):
             try:
-                res = db.get_download_url(response['result']['image_url'], expiry_seconds=3600)
+                res = db.get_download_url(response['result']['image_url'], expires_in=3600)
                 if res.get('success'):
                     presigned = res.get('data', {}).get('download_url')
                     if presigned:

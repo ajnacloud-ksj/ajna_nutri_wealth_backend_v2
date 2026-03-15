@@ -75,7 +75,7 @@ def _transform_receipt_image(db, receipt):
         elif image_url.startswith('uploads/'):
             # IbexDB-managed S3 key - resolve via db.get_download_url()
             try:
-                res = db.get_download_url(image_url, expiry_seconds=3600)
+                res = db.get_download_url(image_url, expires_in=3600)
                 if res.get('success'):
                     presigned_url = res.get('data', {}).get('download_url')
                     if presigned_url:
@@ -93,7 +93,7 @@ def _transform_receipt_image(db, receipt):
             # Legacy s3:// URL format
             try:
                 s3_key = image_url.replace('s3://', '').split('/', 1)[1] if '/' in image_url else image_url.replace('s3://', '')
-                res = db.get_download_url(s3_key, expiry_seconds=3600)
+                res = db.get_download_url(s3_key, expires_in=3600)
                 if res.get('success'):
                     presigned_url = res.get('data', {}).get('download_url')
                     if presigned_url:
