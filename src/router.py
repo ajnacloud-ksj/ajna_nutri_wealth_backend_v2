@@ -49,6 +49,7 @@ ROUTES = [
     ('GET', r'^/v1/admin/database/tables$', database_admin.list_tables),
     ('POST', r'^/v1/admin/database/optimize$', database_admin.optimize_table),
     ('POST', r'^/v1/admin/database/optimize-all$', database_admin.optimize_all_tables),
+    ('POST', r'^/v1/admin/database/query$', database_admin.execute_query),
 
     # Admin User & System Management
     ('GET', r'^/v1/admin/users$', admin.list_users_admin),

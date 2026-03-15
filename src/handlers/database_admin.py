@@ -399,6 +399,62 @@ def optimize_all_tables(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[
 
 
 @log_handler
+@require_admin_role
+def execute_query(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    POST /v1/admin/database/query - Execute a read-only SQL query against the database.
+    Admin only. Only SELECT statements are allowed.
+    """
+    try:
+        db = context['db']
+        body = json.loads(event.get('body', '{}'))
+        sql = (body.get('sql') or '').strip()
+
+        if not sql:
+            return respond(400, {"error": "sql is required"}, event=event)
+
+        # Safety: only allow SELECT queries
+        sql_upper = sql.upper().lstrip()
+        if not sql_upper.startswith('SELECT'):
+            return respond(400, {
+                "error": "Only SELECT queries are allowed",
+                "message": "Write operations (INSERT, UPDATE, DELETE, DROP, etc.) are not permitted."
+            }, event=event)
+
+        limit = body.get('limit', 100)
+        # Enforce a max limit to prevent huge result sets
+        if limit > 1000:
+            limit = 1000
+
+        # If query doesn't already have a LIMIT, add one
+        if 'LIMIT' not in sql_upper:
+            sql = f"{sql} LIMIT {limit}"
+
+        logger.info(f"Executing admin query: {sql[:200]}")
+
+        result = db.execute_sql(sql)
+
+        if result.get('success'):
+            data = result.get('data', {})
+            columns = data.get('columns', [])
+            rows = data.get('rows', [])
+            return respond(200, {
+                "columns": columns,
+                "rows": rows,
+                "row_count": len(rows),
+                "truncated": len(rows) >= limit
+            }, event=event)
+        else:
+            error = result.get('error', {})
+            error_msg = error.get('message', str(error)) if isinstance(error, dict) else str(error)
+            return respond(400, {"error": error_msg}, event=event)
+
+    except Exception as e:
+        logger.error(f"Error executing query: {e}", exc_info=True)
+        return respond(500, {"error": str(e)}, event=event)
+
+
+@log_handler
 def database_health_check(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
     """
     GET /v1/admin/database/health - Check database health (no auth required for health checks)
