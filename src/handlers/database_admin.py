@@ -436,8 +436,16 @@ def execute_query(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, A
 
         if result.get('success'):
             data = result.get('data', {})
-            columns = data.get('columns', [])
-            rows = data.get('rows', [])
+            records = data.get('records', [])
+
+            # Extract columns from first record keys, rows as value arrays
+            if records:
+                columns = list(records[0].keys())
+                rows = [[r.get(c) for c in columns] for r in records]
+            else:
+                columns = []
+                rows = []
+
             return respond(200, {
                 "columns": columns,
                 "rows": rows,
