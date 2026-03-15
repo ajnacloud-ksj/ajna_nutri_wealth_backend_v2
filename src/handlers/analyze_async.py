@@ -11,6 +11,26 @@ from utils.timestamps import utc_now, utc_date
 import boto3
 
 
+def _mark_failed(db, entry_id: str, user_id: str, error_msg: str):
+    """Mark a pending analysis as failed using write (append) instead of update.
+    Iceberg UPDATE can be flaky; since get_analysis_status reads with
+    ORDER BY updated_at DESC LIMIT 1, a new row with status='failed'
+    will be picked up correctly."""
+    try:
+        db.write("app_pending_analyses", [{
+            "id": entry_id,
+            "user_id": user_id,
+            "status": "failed",
+            "error_message": error_msg[:500] if error_msg else "Unknown error",
+            "failed_at": utc_now(),
+            "created_at": utc_now(),
+            "updated_at": utc_now()
+        }])
+        logger.info(f"Marked entry {entry_id} as failed")
+    except Exception as e:
+        logger.error(f"Failed to mark entry {entry_id} as failed: {e}")
+
+
 def _auto_rotate_base64(base64_image: str) -> str:
     """Auto-rotate a base64 image based on EXIF orientation data."""
     try:
@@ -371,20 +391,7 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
 
             except Exception as storage_error:
                 logger.error(f"Failed to store analysis result for {entry_id}: {str(storage_error)}")
-                # Update status to error
-                db.update("app_pending_analyses",
-                         filters=[
-                             {"field": "id", "operator": "eq", "value": entry_id},
-                             {"field": "user_id", "operator": "eq", "value": user_id}
-                         ],
-                         updates={
-                             "status": "storage_failed",
-                             "error_message": f"Storage failed: {str(storage_error)}",
-                             "category": category,
-                             "failed_at": utc_now(),
-                             "updated_at": utc_now()
-                         })
-                # Don't continue to mark as completed if storage failed
+                _mark_failed(db, entry_id, user_id, f"Storage failed: {str(storage_error)}")
                 return {"statusCode": 500, "body": json.dumps({"success": False, "error": f"Storage failed: {str(storage_error)}"})}
 
             # Update pending_analyses status to completed
@@ -409,38 +416,19 @@ def process_async_request(event: Dict[str, Any], context: Any) -> Dict[str, Any]
             logger.info("Async analysis completed successfully", extra={'entry_id': entry_id})
         else:
             error_msg = result.get('error', 'Unknown error')
-            # Update status to failed
-            db.update("app_pending_analyses",
-                     filters=[
-                         {"field": "id", "operator": "eq", "value": entry_id},
-                         {"field": "user_id", "operator": "eq", "value": user_id}
-                     ],
-                     updates={
-                         "status": "failed",
-                         "error_message": error_msg,
-                         "failed_at": utc_now(),
-                         "updated_at": utc_now()
-                     })
-            logger.error("Async analysis failed", extra={'entry_id': entry_id, 'error': error_msg})
+            logger.error(f"Async analysis failed for {entry_id}: {error_msg}")
+            # Update status to failed — use write (append) since Iceberg UPDATE can be flaky.
+            # The status endpoint uses ORDER BY updated_at DESC LIMIT 1, so the latest row wins.
+            _mark_failed(db, entry_id, user_id, error_msg)
 
         return {"statusCode": 200, "body": json.dumps({"success": True})}
 
     except Exception as e:
         logger.error(f"Critical error in process_async_request: {e}", exc_info=True)
-        # Try to mark as failed if DB available
         try:
-            if 'db' in locals() and 'entry_id' in locals():
-                # Use single filter for UPDATE (IBEX limitation)
-                db.update("app_pending_analyses",
-                         filters=[
-                             {"field": "id", "operator": "eq", "value": entry_id}
-                         ],
-                         updates={
-                             "status": "failed",
-                             "error_message": str(e),
-                             "failed_at": utc_now()
-                         })
-        except:
+            if 'db' in locals() and 'entry_id' in locals() and 'user_id' in locals():
+                _mark_failed(db, entry_id, user_id, str(e))
+        except Exception:
             pass
         return {"statusCode": 500, "body": str(e)}
 

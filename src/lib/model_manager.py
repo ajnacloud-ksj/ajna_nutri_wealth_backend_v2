@@ -96,8 +96,8 @@ class ModelManager:
             model_name="gpt-5-mini",
             base_url="https://api.openai.com/v1",
             temperature=0.0,
-            max_tokens=4096,
-            timeout_seconds=30,
+            max_tokens=8192,  # gpt-5-mini structured output needs extra headroom for reasoning
+            timeout_seconds=45,
             cost_per_1k_tokens=0.00015,
             fallback_provider="groq",
             fallback_model="llama-3.3-70b-versatile",
