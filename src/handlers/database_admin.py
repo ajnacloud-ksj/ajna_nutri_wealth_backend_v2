@@ -309,6 +309,69 @@ def list_tables(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any
 
 @log_handler
 @require_admin_role
+def reset_table(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    POST /v1/admin/database/reset-table - Drop and recreate a single table.
+    Clears all data but preserves the schema.
+    """
+    try:
+        db = context['db']
+        body = json.loads(event.get('body', '{}'))
+        table = body.get('table')
+
+        if not table:
+            return respond(400, {"error": "table is required"}, event=event)
+
+        if not table.startswith('app_'):
+            return respond(400, {"error": "Only app_ tables can be reset"}, event=event)
+
+        logger.warning(f"Resetting table: {table}")
+
+        # Map full table name back to schema name (remove app_ prefix)
+        schema_name = table[4:]  # strip "app_"
+        schemas_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'schemas')
+        schema_path = os.path.join(schemas_dir, f"{schema_name}.json")
+
+        # Load schema before dropping
+        if os.path.exists(schema_path):
+            with open(schema_path, 'r') as f:
+                schema = json.load(f)
+        else:
+            return respond(400, {
+                "error": f"Schema not found for {table}",
+                "message": f"No schema file: {schema_name}.json"
+            }, event=event)
+
+        # Drop the table
+        drop_result = db.drop_table(table, purge=True)
+        if not drop_result.get('success'):
+            error = drop_result.get('error', 'Unknown error')
+            # If table doesn't exist, that's fine - we'll recreate it
+            if 'not found' not in str(error).lower() and 'does not exist' not in str(error).lower():
+                return respond(500, {"error": f"Failed to drop table: {error}"}, event=event)
+
+        # Recreate the table
+        create_result = db.create_table(table=table, schema=schema, if_not_exists=True)
+        if create_result.get('success'):
+            logger.info(f"Table {table} reset successfully")
+            return respond(200, {
+                "table": table,
+                "reset": True,
+                "message": f"Table {table} dropped and recreated"
+            }, event=event)
+        else:
+            return respond(500, {
+                "error": f"Table dropped but recreation failed: {create_result.get('error')}",
+                "table": table
+            }, event=event)
+
+    except Exception as e:
+        logger.error(f"Error resetting table: {e}", exc_info=True)
+        return respond(500, {"error": str(e)}, event=event)
+
+
+@log_handler
+@require_admin_role
 def optimize_table(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
     """
     POST /v1/admin/database/optimize - Compact a table to merge small files

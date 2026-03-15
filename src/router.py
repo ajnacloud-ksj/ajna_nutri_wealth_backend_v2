@@ -47,6 +47,7 @@ ROUTES = [
     ('POST', r'^/v1/admin/database/reset$', database_admin.reset_database),
     ('GET', r'^/v1/admin/database/health$', database_admin.database_health_check),
     ('GET', r'^/v1/admin/database/tables$', database_admin.list_tables),
+    ('POST', r'^/v1/admin/database/reset-table$', database_admin.reset_table),
     ('POST', r'^/v1/admin/database/optimize$', database_admin.optimize_table),
     ('POST', r'^/v1/admin/database/optimize-all$', database_admin.optimize_all_tables),
     ('POST', r'^/v1/admin/database/query$', database_admin.execute_query),
