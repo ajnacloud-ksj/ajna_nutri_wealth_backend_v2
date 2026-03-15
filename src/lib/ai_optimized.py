@@ -385,9 +385,9 @@ Return ONLY a JSON object with:
             # Call API for detailed analysis
             logger.debug(f"Starting detailed analysis with model: {config.model_name} (Provider: {config.provider})")
 
-            # Use structured outputs for receipts with gpt-4o models
+            # Use structured outputs for receipts with OpenAI models that support it
             response_format = {"type": "json_object"}  # Default
-            if category == "receipt" and config.provider == "openai" and "gpt-4o" in config.model_name:
+            if category == "receipt" and config.provider == "openai" and any(p in config.model_name for p in ("gpt-4o", "gpt-5")):
                 try:
                     from schemas.receipt_schema import RECEIPT_RESPONSE_SCHEMA
                     response_format = {

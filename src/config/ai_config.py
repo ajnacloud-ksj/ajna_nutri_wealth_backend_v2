@@ -80,8 +80,8 @@ class AIConfig:
                 "api_key_env": "OPENAI_API_KEY",
                 "headers": {"OpenAI-Beta": "assistants=v2"},
                 "models": {
-                    "gpt-4o-mini": ModelConfig(
-                        name="gpt-4o-mini",
+                    "gpt-5-mini": ModelConfig(
+                        name="gpt-5-mini",
                         provider=AIProvider.OPENAI,
                         api_key_env="OPENAI_API_KEY",
                         max_tokens=16000,
@@ -89,32 +89,14 @@ class AIConfig:
                         cost_per_1k_output=0.0006,
                         context_window=128000
                     ),
-                    "gpt-4o": ModelConfig(
-                        name="gpt-4o",
+                    "gpt-5.4": ModelConfig(
+                        name="gpt-5.4",
                         provider=AIProvider.OPENAI,
                         api_key_env="OPENAI_API_KEY",
-                        max_tokens=4096,
+                        max_tokens=8192,
                         cost_per_1k_input=0.0025,
                         cost_per_1k_output=0.01,
-                        context_window=128000
-                    ),
-                    "gpt-4-turbo": ModelConfig(
-                        name="gpt-4-turbo",
-                        provider=AIProvider.OPENAI,
-                        api_key_env="OPENAI_API_KEY",
-                        max_tokens=4096,
-                        cost_per_1k_input=0.01,
-                        cost_per_1k_output=0.03,
-                        context_window=128000
-                    ),
-                    "gpt-3.5-turbo": ModelConfig(
-                        name="gpt-3.5-turbo",
-                        provider=AIProvider.OPENAI,
-                        api_key_env="OPENAI_API_KEY",
-                        max_tokens=4096,
-                        cost_per_1k_input=0.0005,
-                        cost_per_1k_output=0.0015,
-                        context_window=16384
+                        context_window=200000
                     ),
                     # Add GPT-5.2 if it exists in your setup
                     "gpt-5.2-2025-12-11": ModelConfig(
@@ -248,25 +230,25 @@ class AIConfig:
         # Default model selections per use case
         self.default_models = {
             "classifier": {
-                AIProvider.OPENAI: "gpt-4o-mini",
+                AIProvider.OPENAI: "gpt-5-mini",
                 AIProvider.GROQ: "llama-3.3-70b-versatile",
                 AIProvider.ANTHROPIC: "claude-3-haiku",
                 AIProvider.OLLAMA: "llama3.2",
             },
             "food": {
-                AIProvider.OPENAI: os.environ.get("FOOD_MODEL_OPENAI", "gpt-4o-mini"),
+                AIProvider.OPENAI: os.environ.get("FOOD_MODEL_OPENAI", "gpt-5-mini"),
                 AIProvider.GROQ: os.environ.get("FOOD_MODEL_GROQ", "llama-3.3-70b-versatile"),
                 AIProvider.ANTHROPIC: "claude-3-5-sonnet",
                 AIProvider.OLLAMA: "mixtral:8x7b",
             },
             "receipt": {
-                AIProvider.OPENAI: os.environ.get("RECEIPT_MODEL_OPENAI", "gpt-4o"),  # Upgraded from gpt-4o-mini for better reliability
+                AIProvider.OPENAI: os.environ.get("RECEIPT_MODEL_OPENAI", "gpt-5-mini"),
                 AIProvider.GROQ: os.environ.get("RECEIPT_MODEL_GROQ", "llama-3.2-90b-vision"),
                 AIProvider.ANTHROPIC: "claude-3-5-sonnet",
                 AIProvider.OLLAMA: "llama3.2",
             },
             "workout": {
-                AIProvider.OPENAI: os.environ.get("WORKOUT_MODEL_OPENAI", "gpt-4o-mini"),
+                AIProvider.OPENAI: os.environ.get("WORKOUT_MODEL_OPENAI", "gpt-5-mini"),
                 AIProvider.GROQ: os.environ.get("WORKOUT_MODEL_GROQ", "llama-3.3-70b-versatile"),
                 AIProvider.ANTHROPIC: "claude-3-haiku",
                 AIProvider.OLLAMA: "llama3.2",
@@ -321,7 +303,7 @@ class AIConfig:
             else:
                 # Ultimate fallback
                 model_config = ModelConfig(
-                    name="gpt-4o-mini",
+                    name="gpt-5-mini",
                     provider=AIProvider.OPENAI,
                     api_key_env="OPENAI_API_KEY"
                 )

@@ -154,10 +154,8 @@ def list_available_models(event, context):
         # Add cost information
         model_costs = {
             "openai": {
-                "gpt-4o-mini": {"input": 0.00015, "output": 0.0006},
-                "gpt-4o": {"input": 0.0025, "output": 0.01},
-                "gpt-4-turbo": {"input": 0.01, "output": 0.03},
-                "gpt-3.5-turbo": {"input": 0.0005, "output": 0.0015}
+                "gpt-5-mini": {"input": 0.00015, "output": 0.0006},
+                "gpt-5.4": {"input": 0.0025, "output": 0.01}
             },
             "groq": {
                 "llama-3.3-70b-versatile": {"input": 0.00059, "output": 0.00079},
@@ -184,7 +182,7 @@ def test_model(event, context):
     try:
         body = json.loads(event.get('body', '{}'))
         provider = body.get('provider', 'openai')
-        model = body.get('model', 'gpt-4o-mini')
+        model = body.get('model', 'gpt-5-mini')
         test_prompt = body.get('prompt', 'Say "Hello, this is a test!"')
 
         db = context.get('db')

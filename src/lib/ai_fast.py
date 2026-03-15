@@ -32,17 +32,15 @@ class FastAIService:
         )
 
         # Use environment variables for model selection with fallbacks
-        self.default_model = os.environ.get("AI_MODEL", "gpt-4o-mini")
+        self.default_model = os.environ.get("AI_MODEL", "gpt-5-mini")
 
         # Single-pass mode for better performance
         self.single_pass = os.environ.get("AI_SINGLE_PASS", "true").lower() == "true"
 
         # Cost tracking (per 1K tokens)
         self.model_costs = {
-            "gpt-4o-mini": {"input": 0.00015, "output": 0.0006},
-            "gpt-4o": {"input": 0.0025, "output": 0.01},
-            "gpt-4-turbo": {"input": 0.01, "output": 0.03},
-            "gpt-3.5-turbo": {"input": 0.0005, "output": 0.0015}
+            "gpt-5-mini": {"input": 0.00015, "output": 0.0006},
+            "gpt-5.4": {"input": 0.0025, "output": 0.01}
         }
 
         logger.info(f"FastAIService initialized with model: {self.default_model}, single_pass: {self.single_pass}")

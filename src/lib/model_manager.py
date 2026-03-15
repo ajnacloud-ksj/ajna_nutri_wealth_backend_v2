@@ -417,10 +417,8 @@ class ModelManager:
             "openai": [
                 "gpt-5.4",
                 "gpt-5-mini",
-                "gpt-4o-mini",
-                "gpt-4o",
-                "gpt-4-turbo",
-                "gpt-3.5-turbo"
+                "gpt-5-mini",
+                "gpt-5.4"
             ],
             "groq": [
                 "llama-3.3-70b-versatile",

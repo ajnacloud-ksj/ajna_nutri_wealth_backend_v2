@@ -47,10 +47,10 @@ class AsyncAIService:
         # Model configuration per provider
         self.model_configs = {
             AIProvider.OPENAI: {
-                "classifier": os.environ.get("OPENAI_CLASSIFIER_MODEL", "gpt-4o-mini"),
-                "food": os.environ.get("OPENAI_FOOD_MODEL", "gpt-4o-mini"),
-                "receipt": os.environ.get("OPENAI_RECEIPT_MODEL", "gpt-4o-mini"),
-                "workout": os.environ.get("OPENAI_WORKOUT_MODEL", "gpt-4o-mini"),
+                "classifier": os.environ.get("OPENAI_CLASSIFIER_MODEL", "gpt-5-mini"),
+                "food": os.environ.get("OPENAI_FOOD_MODEL", "gpt-5-mini"),
+                "receipt": os.environ.get("OPENAI_RECEIPT_MODEL", "gpt-5-mini"),
+                "workout": os.environ.get("OPENAI_WORKOUT_MODEL", "gpt-5-mini"),
             },
             AIProvider.GROQ: {
                 "classifier": os.environ.get("GROQ_CLASSIFIER_MODEL", "llama-3.3-70b-versatile"),
