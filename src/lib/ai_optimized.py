@@ -141,8 +141,15 @@ Return ONLY a JSON object with:
                 response_format={"type": "json_object"}
             )
 
-            result = json.loads(response.choices[0].message.content)
-            tokens = response.usage.total_tokens
+            content = response.choices[0].message.content
+            tokens = response.usage.total_tokens if response.usage else 0
+
+            # Handle None/empty content (model refusal or content filtering)
+            if not content or not content.strip():
+                logger.warning("Classification returned empty content, falling back to keyword classification")
+                return self._keyword_classify(description)
+
+            result = json.loads(content)
 
             logger.debug(
                 "Content classified",
@@ -159,9 +166,26 @@ Return ONLY a JSON object with:
                 tokens
             )
 
+        except json.JSONDecodeError as e:
+            logger.error(f"Classification JSON parse failed: {e}")
+            return self._keyword_classify(description)
+
         except Exception as e:
             logger.error(f"Classification failed: {e}")
-            raise
+            return self._keyword_classify(description)
+
+    def _keyword_classify(self, description: Optional[str]) -> Tuple[str, float, int]:
+        """Fallback keyword-based classification when AI classification fails"""
+        if description:
+            desc_lower = description.lower()
+            if any(w in desc_lower for w in ["receipt", "invoice", "bill", "purchase", "store", "walmart", "target"]):
+                return ("receipt", 0.6, 0)
+            elif any(w in desc_lower for w in ["workout", "exercise", "gym", "fitness", "run", "jog"]):
+                return ("workout", 0.6, 0)
+            elif any(w in desc_lower for w in ["food", "meal", "eat", "drink", "calories", "breakfast", "lunch", "dinner"]):
+                return ("food", 0.6, 0)
+        # Default to food for image-based submissions
+        return ("food", 0.4, 0)
 
     def _load_prompt(self, category: str) -> Dict[str, str]:
         """Load prompt for specific category"""
