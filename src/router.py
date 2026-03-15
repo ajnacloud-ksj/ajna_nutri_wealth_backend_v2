@@ -24,7 +24,7 @@ from src.handlers import invitations  # Invitation code management
 from src.handlers import relationships  # Relationship management
 from src.handlers import permissions_mgmt  # Permissions management
 from src.handlers import admin  # Admin user/system management
-# from src.handlers import user  # User profile management - COMMENTED OUT UNTIL DEPLOYED
+from src.handlers import user  # User profile, export, account deletion
 
 # Note: Using improved analyze handler with two-stage AI processing
 
@@ -149,9 +149,10 @@ ROUTES = [
     ('POST', r'^/v1/storage/download-url$', storage.get_download_url),
     ('GET', r'^/v1/storage/(?P<path>.+)$', storage.get_file),
 
-    # User Profile (before generic data routes) - COMMENTED OUT UNTIL DEPLOYED
-    # ('GET', r'^/v1/user/profile$', user.get_current_user),
-    # ('GET', r'^/v1/user/(?P<id>[a-zA-Z0-9-]+)$', user.get_user_by_id),
+    # User Profile & Data Management
+    ('GET', r'^/v1/user/profile$', user.get_current_user),
+    ('GET', r'^/v1/user/export$', user.export_user_data),
+    ('DELETE', r'^/v1/user/account$', user.delete_account),
 
     # Generic Data (Last to avoid collisions)
     ('GET', r'^/v1/(?P<table>[a-zA-Z0-9_]+)$', data.list_data),
