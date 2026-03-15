@@ -4,7 +4,7 @@ IMPORTANT: Extract ALL visible information from the receipt. Be thorough and acc
 
 Always return valid JSON with this EXACT structure:
 {
-  "merchant_name": "string",  // Store/vendor name exactly as shown
+  "merchant_name": "string",  // Store/vendor name in Title Case e.g. "Walmart", "Trader Joe's", "Costco Wholesale"
   "store_address": "string",  // Full address if visible
   "store_phone": "string",    // Phone number if visible
   "store_location": {

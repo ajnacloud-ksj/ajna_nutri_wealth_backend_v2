@@ -11,6 +11,23 @@ from utils.timestamps import utc_now, utc_date
 import boto3
 
 
+def _to_title_case(text: str) -> str:
+    """Convert text to Title Case, preserving acronyms like HIIT, 5K."""
+    if not text:
+        return text
+    words = text.split()
+    result = []
+    for word in words:
+        # Preserve all-caps words (acronyms) and words starting with digits
+        if word.isupper() and len(word) > 1:
+            result.append(word)
+        elif word[0].isdigit():
+            result.append(word)
+        else:
+            result.append(word.capitalize())
+    return ' '.join(result)
+
+
 def _mark_failed(db, entry_id: str, user_id: str, error_msg: str):
     """Mark a pending analysis as failed using write (append) instead of update.
     Iceberg UPDATE can be flaky; since get_analysis_status reads with
@@ -470,14 +487,16 @@ def _store_food_result(db, user_id: str, entry_id: str, data: Dict, image_url: s
             total_fiber += _num(item.get('fiber', 0)) * quantity
             total_sodium += _num(item.get('sodium', 0)) * quantity
 
-        # Always prefer AI-identified food names over user description
-        # User descriptions are often generic ("AI-analyzed content", empty, etc.)
+        # Use AI dish name, falling back to user description or ingredient names
         GENERIC_DESCRIPTIONS = {'', 'ai-analyzed content', 'food', 'meal', 'snack', 'none'}
-        if food_items:
-            food_names = [item.get('name', 'Food') for item in food_items[:3]]
-            final_description = ', '.join(food_names)
+        dish_name = _to_title_case(data.get('dish_name', '').strip())
+        if dish_name:
+            final_description = dish_name
         elif description and description.strip().lower() not in GENERIC_DESCRIPTIONS:
             final_description = description
+        elif food_items:
+            food_names = [item.get('name', 'Food') for item in food_items[:3]]
+            final_description = ', '.join(food_names)
         else:
             final_description = 'Food'
 
@@ -565,7 +584,7 @@ def _store_receipt_result(db, user_id: str, entry_id: str, data: Dict, image_url
         # Guard against AI returning location names as merchant
         _INVALID_MERCHANTS = {'string', 'unknown', 'n/a', '', 'united states', 'united states of america',
                               'usa', 'india', 'canada', 'uk', 'united kingdom', 'australia'}
-        merchant = data.get('merchant_name', 'Unknown')
+        merchant = _to_title_case(data.get('merchant_name', 'Unknown').strip())
         if merchant.lower().strip() in _INVALID_MERCHANTS:
             merchant = 'Unknown Vendor'
 
@@ -708,6 +727,11 @@ def _store_workout_result(db, user_id: str, entry_id: str, data: Dict, image_url
         duration = float(data.get('duration_minutes') or data.get('duration') or 0)
         calories = float(data.get('calories_burned') or data.get('calories_burned_estimate') or data.get('estimated_calories') or 0)
 
+        # Use AI workout name as description, falling back to type + notes
+        workout_name = _to_title_case(data.get('workout_name', '').strip())
+        if not workout_name:
+            workout_name = workout_type
+
         workout_record = {
             'id': entry_id,
             'user_id': user_id,
@@ -717,7 +741,7 @@ def _store_workout_result(db, user_id: str, entry_id: str, data: Dict, image_url
             'workout_date': data.get('workout_date') or utc_date(),
             'intensity_level': data.get('intensity_level', ''),
             'muscle_groups': data.get('muscle_groups', ''),
-            'description': data.get('notes') or data.get('description') or '',
+            'description': workout_name,
             'notes': data.get('notes', ''),
             'image_url': image_url or '',
             'created_at': utc_now(),

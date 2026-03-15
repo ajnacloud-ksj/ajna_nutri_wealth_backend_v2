@@ -9,6 +9,7 @@ Each ingredient should have its own nutritional values (including absorbed oil/s
 
 Always return valid JSON with this structure:
 {
+  "dish_name": "string", // Short, recognizable dish name in Title Case e.g. "Chicken Curry With Rice", "Caesar Salad", "Veggie Fried Rice"
   "food_items": [{"name": "string (individual ingredient with estimated weight)", "calories": number, "protein": number, "carbs": number, "fat": number, "fiber": number, "sodium": number}],
   "total_calories": number,
   "meal_type": "breakfast|lunch|dinner|snack",
