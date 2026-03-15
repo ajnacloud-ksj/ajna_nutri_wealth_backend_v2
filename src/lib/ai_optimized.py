@@ -444,26 +444,15 @@ Return ONLY a JSON object with:
             analysis_tokens = completion.usage.total_tokens if completion.usage else 0
             total_tokens += analysis_tokens
 
-            # Handle None/empty analysis response — retry without response_format
+            # Handle None/empty analysis response (e.g. reasoning model ran out of tokens)
             if not analysis_text or not analysis_text.strip():
-                logger.warning(f"Analysis returned empty content for category={category}, retrying without response_format")
-                retry_completion = client.chat.completions.create(
-                    model=config.model_name,
-                    messages=messages,
-                    **config.temperature_kwargs(),
-                    **config.token_kwargs(),
-                )
-                analysis_text = retry_completion.choices[0].message.content
-                retry_tokens = retry_completion.usage.total_tokens if retry_completion.usage else 0
-                total_tokens += retry_tokens
-
-                if not analysis_text or not analysis_text.strip():
-                    logger.error(f"Analysis retry also returned empty for category={category}")
-                    return {
-                        "success": False,
-                        "error": f"AI returned empty response for {category} analysis (model may not support this image)",
-                        "category": category
-                    }
+                logger.error(f"Analysis returned empty content for category={category} "
+                             f"(model may have exhausted max_completion_tokens on reasoning)")
+                return {
+                    "success": False,
+                    "error": f"AI returned empty response for {category} analysis — increase max_completion_tokens",
+                    "category": category
+                }
 
             # Parse result with retry logic for receipts
             try:

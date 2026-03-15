@@ -72,8 +72,8 @@ class ModelManager:
             model_name="gpt-5-mini",
             base_url="https://api.openai.com/v1",
             temperature=0.0,
-            max_tokens=100,
-            timeout_seconds=10,
+            max_tokens=1024,  # gpt-5-mini is a reasoning model: ~128-256 reasoning tokens + output
+            timeout_seconds=15,
             cost_per_1k_tokens=0.00015,
             api_key_env="OPENAI_API_KEY"
         ),
@@ -83,7 +83,7 @@ class ModelManager:
             model_name="gpt-5-mini",
             base_url="https://api.openai.com/v1",
             temperature=0.0,
-            max_tokens=2048,
+            max_tokens=4096,  # gpt-5-mini needs headroom for reasoning tokens
             timeout_seconds=30,
             cost_per_1k_tokens=0.00015,
             fallback_provider="groq",
@@ -109,7 +109,7 @@ class ModelManager:
             model_name="gpt-5-mini",
             base_url="https://api.openai.com/v1",
             temperature=0.0,
-            max_tokens=2048,
+            max_tokens=4096,  # gpt-5-mini needs headroom for reasoning tokens
             timeout_seconds=30,
             cost_per_1k_tokens=0.00015,
             api_key_env="OPENAI_API_KEY"
