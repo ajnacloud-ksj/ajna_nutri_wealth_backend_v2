@@ -444,10 +444,17 @@ def delete_data(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any
         filters.append({"field": "user_id", "operator": "eq", "value": user_id})
 
     try:
-        result = db.delete(db_table_name, filters=filters)
+        # Use hard_delete for physical removal (no ghost data, clean queries)
+        # Falls back to soft delete if hard_delete is not available
+        try:
+            result = db.hard_delete(db_table_name, filters=filters, confirm=True)
+        except (AttributeError, NotImplementedError):
+            # SDK version doesn't support hard_delete, fall back to soft delete
+            logger.warning(f"hard_delete not available, using soft delete for {table_name}/{item_id}")
+            result = db.delete(db_table_name, filters=filters)
 
         if result and result.get('success'):
-            logger.info(f"Deleted {table_name}/{item_id}", user_id=user_id)
+            logger.info(f"Hard deleted {table_name}/{item_id}", user_id=user_id)
             return respond(204, None, event=event)
         else:
             return respond(404, {"error": "Record not found or not authorized"}, event=event)

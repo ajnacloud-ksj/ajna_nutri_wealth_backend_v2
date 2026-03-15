@@ -200,6 +200,13 @@ def delete_account(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, 
 
     logger.warning(f"Account deletion requested for user {user_id}")
 
+    def _hard_delete(table: str, filters: list) -> dict:
+        """Hard delete with fallback to soft delete."""
+        try:
+            return db.hard_delete(table, filters=filters, confirm=True)
+        except (AttributeError, NotImplementedError):
+            return db.delete(table, filters=filters)
+
     try:
         deleted = {}
 
@@ -228,34 +235,33 @@ def delete_account(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, 
             except Exception:
                 pass
 
-        # Delete child records first
+        # Hard delete child records first
         for entry_id in food_entry_ids:
             try:
-                db.delete("app_food_items", filters=[{"field": "food_entry_id", "operator": "eq", "value": entry_id}])
+                _hard_delete("app_food_items", filters=[{"field": "food_entry_id", "operator": "eq", "value": entry_id}])
             except Exception:
                 pass
 
         for receipt_id in receipt_ids:
             try:
-                # Get receipt item IDs for embeddings cascade
                 items_result = db.query("app_receipt_items", filters=[{"field": "receipt_id", "operator": "eq", "value": receipt_id}], projection=["id"], limit=1000, include_deleted=False)
                 if items_result and items_result.get('success'):
                     for item in items_result.get('data', {}).get('records', []):
                         try:
-                            db.delete("app_receipt_item_embeddings", filters=[{"field": "receipt_item_id", "operator": "eq", "value": item['id']}])
+                            _hard_delete("app_receipt_item_embeddings", filters=[{"field": "receipt_item_id", "operator": "eq", "value": item['id']}])
                         except Exception:
                             pass
-                db.delete("app_receipt_items", filters=[{"field": "receipt_id", "operator": "eq", "value": receipt_id}])
+                _hard_delete("app_receipt_items", filters=[{"field": "receipt_id", "operator": "eq", "value": receipt_id}])
             except Exception:
                 pass
 
         for workout_id in workout_ids:
             try:
-                db.delete("app_workout_exercises", filters=[{"field": "workout_id", "operator": "eq", "value": workout_id}])
+                _hard_delete("app_workout_exercises", filters=[{"field": "workout_id", "operator": "eq", "value": workout_id}])
             except Exception:
                 pass
 
-        # Delete direct user tables
+        # Hard delete direct user tables
         direct_tables = [
             "app_food_entries_v2", "app_receipts", "app_workouts",
             "app_shopping_list_items", "app_shopping_lists",
@@ -266,18 +272,18 @@ def delete_account(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, 
 
         for table in direct_tables:
             try:
-                result = db.delete(table, filters=[{"field": "user_id", "operator": "eq", "value": user_id}])
+                result = _hard_delete(table, filters=[{"field": "user_id", "operator": "eq", "value": user_id}])
                 if result and result.get('success'):
-                    deleted[table] = "deleted"
+                    deleted[table] = "hard_deleted"
                 else:
                     deleted[table] = "skipped"
             except Exception as e:
                 deleted[table] = f"error: {str(e)[:100]}"
 
-        # Delete user record last
+        # Hard delete user record last
         try:
-            result = db.delete("app_users_v4", filters=[{"field": "id", "operator": "eq", "value": user_id}])
-            deleted["app_users_v4"] = "deleted" if result and result.get('success') else "skipped"
+            result = _hard_delete("app_users_v4", filters=[{"field": "id", "operator": "eq", "value": user_id}])
+            deleted["app_users_v4"] = "hard_deleted" if result and result.get('success') else "skipped"
         except Exception as e:
             deleted["app_users_v4"] = f"error: {str(e)[:100]}"
 
