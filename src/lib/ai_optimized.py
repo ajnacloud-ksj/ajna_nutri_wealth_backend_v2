@@ -147,7 +147,7 @@ Return ONLY a JSON object with:
             # Handle None/empty content (model refusal or content filtering)
             if not content or not content.strip():
                 logger.warning("Classification returned empty content, falling back to keyword classification")
-                return self._keyword_classify(description)
+                return self._keyword_classify(description, has_image=bool(image_url))
 
             result = json.loads(content)
 
@@ -168,23 +168,29 @@ Return ONLY a JSON object with:
 
         except json.JSONDecodeError as e:
             logger.error(f"Classification JSON parse failed: {e}")
-            return self._keyword_classify(description)
+            return self._keyword_classify(description, has_image=bool(image_url))
 
         except Exception as e:
             logger.error(f"Classification failed: {e}")
-            return self._keyword_classify(description)
+            return self._keyword_classify(description, has_image=bool(image_url))
 
-    def _keyword_classify(self, description: Optional[str]) -> Tuple[str, float, int]:
+    def _keyword_classify(self, description: Optional[str], has_image: bool = False) -> Tuple[str, float, int]:
         """Fallback keyword-based classification when AI classification fails"""
         if description:
             desc_lower = description.lower()
-            if any(w in desc_lower for w in ["receipt", "invoice", "bill", "purchase", "store", "walmart", "target"]):
-                return ("receipt", 0.6, 0)
-            elif any(w in desc_lower for w in ["workout", "exercise", "gym", "fitness", "run", "jog"]):
-                return ("workout", 0.6, 0)
-            elif any(w in desc_lower for w in ["food", "meal", "eat", "drink", "calories", "breakfast", "lunch", "dinner"]):
-                return ("food", 0.6, 0)
-        # Default to food for image-based submissions
+            # Filter out generic/placeholder descriptions
+            GENERIC = {'ai-analyzed content', 'food', 'meal', '', 'none', 'image', 'photo'}
+            if desc_lower.strip() not in GENERIC:
+                if any(w in desc_lower for w in ["receipt", "invoice", "bill", "purchase", "store", "walmart", "target", "trader"]):
+                    return ("receipt", 0.6, 0)
+                elif any(w in desc_lower for w in ["workout", "exercise", "gym", "fitness", "run", "jog"]):
+                    return ("workout", 0.6, 0)
+                elif any(w in desc_lower for w in ["food", "meal", "eat", "drink", "calories", "breakfast", "lunch", "dinner"]):
+                    return ("food", 0.6, 0)
+        # When AI vision failed and description is generic, default to receipt
+        # (most image uploads without specific food descriptions are receipts)
+        if has_image:
+            return ("receipt", 0.4, 0)
         return ("food", 0.4, 0)
 
     def _load_prompt(self, category: str) -> Dict[str, str]:
@@ -438,14 +444,26 @@ Return ONLY a JSON object with:
             analysis_tokens = completion.usage.total_tokens if completion.usage else 0
             total_tokens += analysis_tokens
 
-            # Handle None/empty analysis response
+            # Handle None/empty analysis response — retry without response_format
             if not analysis_text or not analysis_text.strip():
-                logger.error(f"Analysis returned empty content for category={category}")
-                return {
-                    "success": False,
-                    "error": f"AI returned empty response for {category} analysis",
-                    "category": category
-                }
+                logger.warning(f"Analysis returned empty content for category={category}, retrying without response_format")
+                retry_completion = client.chat.completions.create(
+                    model=config.model_name,
+                    messages=messages,
+                    **config.temperature_kwargs(),
+                    **config.token_kwargs(),
+                )
+                analysis_text = retry_completion.choices[0].message.content
+                retry_tokens = retry_completion.usage.total_tokens if retry_completion.usage else 0
+                total_tokens += retry_tokens
+
+                if not analysis_text or not analysis_text.strip():
+                    logger.error(f"Analysis retry also returned empty for category={category}")
+                    return {
+                        "success": False,
+                        "error": f"AI returned empty response for {category} analysis (model may not support this image)",
+                        "category": category
+                    }
 
             # Parse result with retry logic for receipts
             try:
